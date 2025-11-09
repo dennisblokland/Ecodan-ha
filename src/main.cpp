@@ -72,7 +72,6 @@ HASensorNumber compressorFrequency("compressorFrequency", HASensorNumber::Precis
 HASensorNumber runHours("runHours", HASensorNumber::PrecisionP0);
 HASensorNumber flowTempMax("flowTempMax", HASensorNumber::PrecisionP1);
 HASensorNumber flowTempMin("flowTempMin", HASensorNumber::PrecisionP1);
-HASensorNumber unknownMSG5("unknownMSG5", HASensorNumber::PrecisionP0);
 
 HABinarySensor hotWaterTimerActive("hotWaterTimerActive");
 HABinarySensor defrost("defrost");
@@ -114,11 +113,11 @@ void onPowerCommand(bool state, HAHVAC *sender)
   if (state)
   {
 
-    HeatPump.SetSystemPowerMode(ECODAN::PowerState::On);
+    HeatPump.SetSystemPowerMode(SYSTEM_POWER_MODE_ON);
   }
   else
   {
-    HeatPump.SetSystemPowerMode(ECODAN::PowerState::StandBy);
+    HeatPump.SetSystemPowerMode(SYSTEM_POWER_MODE_STANDBY);
   }
 }
 void onTargetTemperatureCommand(HANumeric temperature, HAHVAC *sender)
@@ -130,9 +129,10 @@ void onTargetTemperatureCommand(HANumeric temperature, HAHVAC *sender)
   sender->setTargetTemperature(temperature); // report target temperature back to the HA panel
 }
 
-void HeatPumpKeepAlive(void)
-{
-  HeatPump.KeepAlive();
+void HeatPumpKeepAlive(void) {
+  if (!HeatPump.HeatPumpConnected()) {
+    DEBUG_PRINTLN(F("Heat Pump Disconnected"));
+  }
   HeatPump.TriggerStatusStateMachine();
 }
 
@@ -154,8 +154,8 @@ void HotWaterReport(void)
   hotWater.setTargetTemperature(HeatPump.Status.HotWaterSetpoint);
 
   DHWBoost.setState(HeatPump.Status.HotWaterBoostActive);
-  hotWaterTimerActive.setState(HeatPump.Status.HotWaterTimerActive);
-  hotWaterControlMode.setValue(HowWaterControlModeString[HeatPump.Status.HotWaterControlMode]);
+  hotWaterTimerActive.setState(HeatPump.Status.Booster1Active || HeatPump.Status.Booster2Active);
+  hotWaterControlMode.setValue(HotWaterControlModeString[HeatPump.Status.HotWaterControlMode]);
   legionellaSetpoint.setValue(HeatPump.Status.LegionellaSetpoint);
   hotWaterMaximumTempDrop.setValue(HeatPump.Status.HotWaterMaximumTempDrop);
 }
@@ -164,11 +164,11 @@ void SystemReport(void)
 {
   heaterOutputFlowTemperature.setValue(HeatPump.Status.HeaterOutputFlowTemperature);
   heaterReturnFlowTemperature.setValue(HeatPump.Status.HeaterReturnFlowTemperature);
-  heaterFlowSetpoint.setValue(HeatPump.Status.HeaterFlowSetpoint);
+  heaterFlowSetpoint.setValue(HeatPump.Status.Zone1FlowTemperatureSetpoint);
   outputPower.setValue(HeatPump.Status.OutputPower);
   systemPowerMode.setState(HeatPump.Status.SystemPowerMode);
   systemOperationMode.setValue(SystemOperationModeString[HeatPump.Status.SystemOperationMode]);
-  heatingControlMode.setState(HeatPump.Status.HeatingControlMode);
+  heatingControlMode.setState(HeatPump.Status.HeatingControlModeZ1);
   primaryFlowRate.setValue(HeatPump.Status.PrimaryFlowRate);
   outsideTemp.setValue(HeatPump.Status.OutsideTemperature);
 }
@@ -185,7 +185,6 @@ void TestReport(void)
   runHours.setValue(HeatPump.Status.RunHours);
   flowTempMax.setValue(HeatPump.Status.FlowTempMax);
   flowTempMin.setValue(HeatPump.Status.FlowTempMin);
-  unknownMSG5.setValue(HeatPump.Status.UnknownMSG5);
   defrost.setState(HeatPump.Status.Defrost);
 }
 
@@ -254,7 +253,8 @@ void onZone1TargetTemperatureCommand(HANumeric temperature, HAHVAC *sender)
 {
   float temperatureFloat = temperature.toFloat();
 
-  HeatPump.SetZoneTempSetpoint(temperatureFloat, ZONE1);
+  HeatPump.SetZoneTempSetpoint(temperatureFloat, HeatPump.Status.HeatingControlModeZ1, ZONE1);
+
 
   sender->setTargetTemperature(temperature); // report target temperature back to the HA panel
 }
@@ -262,7 +262,7 @@ void onZone2TargetTemperatureCommand(HANumeric temperature, HAHVAC *sender)
 {
   float temperatureFloat = temperature.toFloat();
 
-  HeatPump.SetZoneTempSetpoint(temperatureFloat, ZONE2);
+  HeatPump.SetZoneTempSetpoint(temperatureFloat, HeatPump.Status.HeatingControlModeZ2, ZONE2);
 
   sender->setTargetTemperature(temperature); // report target temperature back to the HA panel
 }
@@ -274,13 +274,12 @@ void onhotWaterSetpointCommand(HANumeric number, HAHVAC *sender)
 }
 void onSelectPowerCommand(int8_t index, HASelect *sender)
 {
-  HeatPump.SetSystemPowerMode(static_cast<ECODAN::PowerState>(index));
+  HeatPump.SetSystemPowerMode(index);
   sender->setState(index); // report the selected option back to the HA panel
 }
 void onSelectHeatingCommand(int8_t index, HASelect *sender)
 {
-  String command(HeatingControlModeString[index]);
-  HeatPump.SetHeatingControlMode(&command, BOTH);
+  HeatPump.SetHeatingControlMode(index, BOTH);
   sender->setState(index); // report the selected option back to the HA panel
 }
 void onDHWBoostCommand(bool state, HASwitch* sender){
@@ -400,9 +399,6 @@ void setupSensors()
   flowTempMin.setIcon("mdi:thermometer");
   flowTempMin.setName("Flow temperature min");
   flowTempMin.setUnitOfMeasurement("°C");
-
-  unknownMSG5.setIcon("mdi:alert");
-  unknownMSG5.setName("Unknown MSG5");
 
   defrost.setIcon("mdi:snowflake-melt");
   defrost.setName("Defrost");
