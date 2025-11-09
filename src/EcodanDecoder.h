@@ -34,7 +34,10 @@
 #define EXCONNECT_RESPONSE 0x7B
 
 #define TX_MESSAGE_SETTINGS 0x032
+#define TX_MESSAGE_SETTING_DHW 0x034
+#define TX_MESSAGE_SETTING_UNK 0x035
 
+#define TX_MESSAGE_SETTING_DHW_Flag 0x01
 #define COMMANDSIZE 22 // 5 Byte Header + 16 Byte Payload  + 1 Byte Checksum
 #define HEADERSIZE 5
 #define MAXDATABLOCKSIZE 16
@@ -69,7 +72,7 @@ const char HowWaterControlModeString[2][7] = {"Normal", "Eco"};
 #define HEATING_CONTROL_MODE_COOL_ZONE_TEMP 0x03
 #define HEATING_CONTROL_MODE_COOL_FLOW_TEMP 0x044
 #define HEATING_CONTROL_MODE_DRY_UP 0x05
-const char HeatingControlModeString[6][13] = {"Temp", "Flow", "Compensation", "Cool", "Cool Flow", "Dry Up"};
+const char HeatingControlModeString[6][20] = {"Temperature Control", "Fixed Flow", "Compensation Flow", "Cool", "Cool Flow", "Dry Up"};
 
 #define HOLIDAY_MODE_OFF 0
 #define HOLIDAY_MODE_ON 1
@@ -96,7 +99,7 @@ const char COMPRESSORString[4][8] = {"Normal", "Standby", "Defrost", "Wait"};
 #define SET_HOT_WATER_MODE       0x04
 #define UNKNOWN3                 0x02
 #define SET_SYSTEM_POWER         0x01
-
+#define SET_HOT_WATER_BOOST      0x01
 #define ZONE1 0x00
 #define ZONE2 0x01
 #define BOTH  0x02
@@ -212,6 +215,8 @@ public:
                             float HotWaterSetpoint, 
                             uint8_t HeatingControlModeZ1, uint8_t HeatingControlModeZ2, 
                             uint8_t HotWaterMode, uint8_t Power);
+    void EncodeDHW(uint8_t OnOff);
+
     EcodanStatus Status;
 protected:
     
@@ -253,5 +258,4 @@ private:
     void Process0xA1(uint8_t *Payload, EcodanStatus *Status);
     void Process0xA2(uint8_t *Payload, EcodanStatus *Status);
 };
-
 #endif

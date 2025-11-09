@@ -40,7 +40,7 @@ WiFiClient NetworkClient;
 ESPTelnet TelnetServer;
 String HostName;
 HADevice device;
-HAMqtt mqtt(NetworkClient, device, 30);
+HAMqtt mqtt(NetworkClient, device, 32);
 
 void HeatPumpQueryStateEngine(void);
 void setupTelnet(void);
@@ -55,7 +55,6 @@ TimerCallBack HeatPumpQuery1(500, HeatPumpQueryStateEngine);
 TimerCallBack HeatPumpQuery2(60 * 1000, HeatPumpKeepAlive);
 
 HASensorNumber outsideTemp("outsideTemp", HASensorNumber::PrecisionP1);
-//HASensorNumber hotWaterTemperature("hotWaterTemperature", HASensorNumber::PrecisionP1);
 HASensorNumber legionellaSetpoint("legionellaSetpoint", HASensorNumber::PrecisionP1);
 HASensorNumber hotWaterMaximumTempDrop("hotWaterMaximumTempDrop", HASensorNumber::PrecisionP1);
 HASensorNumber heaterOutputFlowTemperature("heaterOutputFlowTemperature", HASensorNumber::PrecisionP1);
@@ -64,6 +63,7 @@ HASensorNumber heaterFlowSetpoint("heaterFlowSetpoint", HASensorNumber::Precisio
 HASensorNumber outputPower("outputPower", HASensorNumber::PrecisionP1);
 HASensorNumber primaryFlowRate("primaryFlowRate", HASensorNumber::PrecisionP0);
 HASensorNumber zone1FlowTemperatureSetpoint("zone1FlowTemperatureSetpoint", HASensorNumber::PrecisionP1);
+HASensorNumber zone2FlowTemperatureSetpoint("zone2FlowTemperatureSetpoint", HASensorNumber::PrecisionP1);
 HASensorNumber consumedHeatingEnergy("consumedHeatingEnergy", HASensorNumber::PrecisionP1);
 HASensorNumber consumedHotWaterEnergy("consumedHotWaterEnergy", HASensorNumber::PrecisionP1);
 HASensorNumber deliveredHeatingEnergy("deliveredHeatingEnergy", HASensorNumber::PrecisionP1);
@@ -74,30 +74,26 @@ HASensorNumber flowTempMax("flowTempMax", HASensorNumber::PrecisionP1);
 HASensorNumber flowTempMin("flowTempMin", HASensorNumber::PrecisionP1);
 HASensorNumber unknownMSG5("unknownMSG5", HASensorNumber::PrecisionP0);
 
-HABinarySensor hotWaterBoostActive("hotWaterBoostActive");
 HABinarySensor hotWaterTimerActive("hotWaterTimerActive");
 HABinarySensor defrost("defrost");
 
 HASensor hotWaterControlMode("hotWaterControlMode");
 HASensor systemOperationMode("systemOperationMode");
 HASelect heatingControlMode("heatingControlMode");
-
+HASwitch DHWBoost("DHWBoost");
 HASelect systemPowerMode("systemPowerMode");
 
 HAHVAC zone1(
-  "zone1",
-  HAHVAC::TargetTemperatureFeature 
-);
+    "zone1",
+    HAHVAC::TargetTemperatureFeature | HAHVAC::ModesFeature);
 
 HAHVAC zone2(
-  "zone2",
-  HAHVAC::TargetTemperatureFeature 
-);
+    "zone2",
+    HAHVAC::TargetTemperatureFeature| HAHVAC::ModesFeature);
 
 HAHVAC hotWater(
-  "hotWater",
-  HAHVAC::TargetTemperatureFeature 
-);
+    "hotWater",
+    HAHVAC::TargetTemperatureFeature| HAHVAC::ModesFeature);
 
 void loop()
 {
@@ -154,9 +150,10 @@ void Zone2Report(void)
 
 void HotWaterReport(void)
 {
+  hotWater.setCurrentTemperature(HeatPump.Status.HotWaterTemperature);
   hotWater.setTargetTemperature(HeatPump.Status.HotWaterSetpoint);
-  hotWater.setCurrentCurrentTemperature(HeatPump.Status.HotWaterTemperature);
-  hotWaterBoostActive.setState(HeatPump.Status.HotWaterBoostActive);
+
+  DHWBoost.setState(HeatPump.Status.HotWaterBoostActive);
   hotWaterTimerActive.setState(HeatPump.Status.HotWaterTimerActive);
   hotWaterControlMode.setValue(HowWaterControlModeString[HeatPump.Status.HotWaterControlMode]);
   legionellaSetpoint.setValue(HeatPump.Status.LegionellaSetpoint);
@@ -174,23 +171,22 @@ void SystemReport(void)
   heatingControlMode.setState(HeatPump.Status.HeatingControlMode);
   primaryFlowRate.setValue(HeatPump.Status.PrimaryFlowRate);
   outsideTemp.setValue(HeatPump.Status.OutsideTemperature);
-
 }
 
 void TestReport(void)
 {
   zone1FlowTemperatureSetpoint.setValue(HeatPump.Status.Zone1FlowTemperatureSetpoint);
+  zone2FlowTemperatureSetpoint.setValue(HeatPump.Status.Zone2FlowTemperatureSetpoint);
   consumedHeatingEnergy.setValue(HeatPump.Status.ConsumedHeatingEnergy);
   consumedHotWaterEnergy.setValue(HeatPump.Status.ConsumedHotWaterEnergy);
   deliveredHeatingEnergy.setValue(HeatPump.Status.DeliveredHeatingEnergy);
-  deliveredHotWaterEnergy.setValue(HeatPump.Status.DeliveredHotWaterEnergy);
+  deliveredHeatingEnergy.setValue(HeatPump.Status.DeliveredHeatingEnergy);
   compressorFrequency.setValue(HeatPump.Status.CompressorFrequency);
   runHours.setValue(HeatPump.Status.RunHours);
   flowTempMax.setValue(HeatPump.Status.FlowTempMax);
   flowTempMin.setValue(HeatPump.Status.FlowTempMin);
   unknownMSG5.setValue(HeatPump.Status.UnknownMSG5);
   defrost.setState(HeatPump.Status.Defrost);
-  
 }
 
 void onTelnetConnect(String ip)
@@ -254,155 +250,167 @@ void setupTelnet()
   }
 }
 
-void onZone1TargetTemperatureCommand(HANumeric temperature, HAHVAC* sender) {
-    float temperatureFloat = temperature.toFloat();
-
-    HeatPump.SetZoneTempSetpoint(temperatureFloat, ZONE1);
-
-    sender->setTargetTemperature(temperature); // report target temperature back to the HA panel
-}
-void onZone2TargetTemperatureCommand(HANumeric temperature, HAHVAC* sender) {
-    float temperatureFloat = temperature.toFloat();
-
-    HeatPump.SetZoneTempSetpoint(temperatureFloat, ZONE2);
-
-    sender->setTargetTemperature(temperature); // report target temperature back to the HA panel
-}
-void onhotWaterSetpointCommand(HANumeric number, HAHVAC* sender)
+void onZone1TargetTemperatureCommand(HANumeric temperature, HAHVAC *sender)
 {
-    float temperatureFloat = number.toFloat();
-    HeatPump.SetHotWaterSetpoint(temperatureFloat);
-    sender->setTargetTemperature(number); // report the selected option back to the HA panel
+  float temperatureFloat = temperature.toFloat();
+
+  HeatPump.SetZoneTempSetpoint(temperatureFloat, ZONE1);
+
+  sender->setTargetTemperature(temperature); // report target temperature back to the HA panel
 }
-void onSelectPowerCommand(int8_t index, HASelect* sender)
+void onZone2TargetTemperatureCommand(HANumeric temperature, HAHVAC *sender)
 {
-    HeatPump.SetSystemPowerMode(static_cast<ECODAN::PowerState>(index));
-    sender->setState(index); // report the selected option back to the HA panel
+  float temperatureFloat = temperature.toFloat();
+
+  HeatPump.SetZoneTempSetpoint(temperatureFloat, ZONE2);
+
+  sender->setTargetTemperature(temperature); // report target temperature back to the HA panel
 }
-void onSelectHeatingCommand(int8_t index, HASelect* sender)
+void onhotWaterSetpointCommand(HANumeric number, HAHVAC *sender)
 {
-    String command(HeatingControlModeString[index]);
-    HeatPump.SetHeatingControlMode(&command, BOTH);
-    sender->setState(index); // report the selected option back to the HA panel
+  float temperatureFloat = number.toFloat();
+  HeatPump.SetHotWaterSetpoint(temperatureFloat);
+  sender->setTargetTemperature(number); // report the selected option back to the HA panel
 }
-void setupSensors(){
-    outsideTemp.setIcon("mdi:thermometer");
-    outsideTemp.setName("Temperature outside");
-    outsideTemp.setUnitOfMeasurement("°C");
-
-
-    hotWaterBoostActive.setIcon("mdi:fire");
-    hotWaterBoostActive.setName("Hot water boost active");
-
-    hotWaterTimerActive.setIcon("mdi:timer");
-    hotWaterTimerActive.setName("Hot water timer active");
-
-    hotWaterControlMode.setIcon("mdi:home");
-    hotWaterControlMode.setName("Hot water control mode");
-
-    legionellaSetpoint.setIcon("mdi:thermometer");
-    legionellaSetpoint.setName("Legionella setpoint");
-    legionellaSetpoint.setUnitOfMeasurement("°C");
-
-    hotWaterMaximumTempDrop.setIcon("mdi:thermometer");
-    hotWaterMaximumTempDrop.setName("Hot water maximum temperature drop");
-    hotWaterMaximumTempDrop.setUnitOfMeasurement("°C");
-
-    heaterOutputFlowTemperature.setIcon("mdi:thermometer");
-    heaterOutputFlowTemperature.setName("Heater output flow temperature");
-    heaterOutputFlowTemperature.setUnitOfMeasurement("°C");
-
-    heaterReturnFlowTemperature.setIcon("mdi:thermometer");
-    heaterReturnFlowTemperature.setName("Heater return flow temperature");
-    heaterReturnFlowTemperature.setUnitOfMeasurement("°C");
-
-    heaterFlowSetpoint.setIcon("mdi:thermometer");
-    heaterFlowSetpoint.setName("Heater flow setpoint");
-    heaterFlowSetpoint.setUnitOfMeasurement("°C");
-
-    outputPower.setIcon("mdi:power-plug");
-    outputPower.setName("Output power");
-    outputPower.setUnitOfMeasurement("W");
-
-    primaryFlowRate.setIcon("mdi:water-pump");
-    primaryFlowRate.setName("Primary flow rate");
-    primaryFlowRate.setUnitOfMeasurement("L/min");
-
-    systemOperationMode.setIcon("mdi:home");
-    systemOperationMode.setName("System operation mode");
-
-    systemPowerMode.setOptions("Standby;On");
-    systemPowerMode.onCommand(onSelectPowerCommand);
-    systemPowerMode.setIcon("mdi:power");
-    systemPowerMode.setName("System power mode");
-
-    heatingControlMode.setOptions("Temp;Flow;Compensation;Cool;Cool Flow;Dry Up");
-    heatingControlMode.onCommand(onSelectHeatingCommand);
-    heatingControlMode.setIcon("mdi:fire");
-    heatingControlMode.setName("Heating control mode");
-
-    zone1.onTargetTemperatureCommand(onZone1TargetTemperatureCommand);
-    zone1.setName("Zone 1");
-    zone1.setMinTemp(5);
-    zone1.setMaxTemp(60);
-    zone1.setTempStep(0.5);
-
-    zone2.onTargetTemperatureCommand(onZone2TargetTemperatureCommand);
-    zone2.setName("Zone 2");
-    zone2.setMinTemp(5);
-    zone2.setMaxTemp(60);
-    zone2.setTempStep(0.5);
-
-    hotWater.onTargetTemperatureCommand(onhotWaterSetpointCommand);
-    hotWater.setName("Hotwater");
-    hotWater.setMinTemp(5);
-    hotWater.setMaxTemp(60);
-    hotWater.setTempStep(0.5);
-
-    zone1FlowTemperatureSetpoint.setIcon("mdi:thermometer");
-    zone1FlowTemperatureSetpoint.setName("Zone 1 flow temperature setpoint");
-    zone1FlowTemperatureSetpoint.setUnitOfMeasurement("°C");
-
-    consumedHeatingEnergy.setIcon("mdi:power-plug");
-    consumedHeatingEnergy.setName("Consumed heating energy");
-    consumedHeatingEnergy.setUnitOfMeasurement("kWh");
-
-    consumedHotWaterEnergy.setIcon("mdi:power-plug");
-    consumedHotWaterEnergy.setName("Consumed hot water energy");
-    consumedHotWaterEnergy.setUnitOfMeasurement("kWh");
-
-    deliveredHeatingEnergy.setIcon("mdi:power-plug");
-    deliveredHeatingEnergy.setName("Delivered heating energy");
-    deliveredHeatingEnergy.setUnitOfMeasurement("kWh");
-
-    deliveredHotWaterEnergy.setIcon("mdi:power-plug");
-    deliveredHotWaterEnergy.setName("Delivered hot water energy");
-    deliveredHotWaterEnergy.setUnitOfMeasurement("kWh");
-
-    compressorFrequency.setIcon("mdi:flash");
-    compressorFrequency.setName("Compressor frequency");
-    compressorFrequency.setUnitOfMeasurement("Hz");
-
-    runHours.setIcon("mdi:timer");
-    runHours.setName("Run hours");
-    runHours.setUnitOfMeasurement("h");
-
-    flowTempMax.setIcon("mdi:thermometer");
-    flowTempMax.setName("Flow temperature max");
-    flowTempMax.setUnitOfMeasurement("°C");
-
-    flowTempMin.setIcon("mdi:thermometer");
-    flowTempMin.setName("Flow temperature min");
-    flowTempMin.setUnitOfMeasurement("°C");
-
-    unknownMSG5.setIcon("mdi:alert");
-    unknownMSG5.setName("Unknown MSG5");
-
-    defrost.setIcon("mdi:snowflake-melt");
-    defrost.setName("Defrost");
-
+void onSelectPowerCommand(int8_t index, HASelect *sender)
+{
+  HeatPump.SetSystemPowerMode(static_cast<ECODAN::PowerState>(index));
+  sender->setState(index); // report the selected option back to the HA panel
 }
+void onSelectHeatingCommand(int8_t index, HASelect *sender)
+{
+  String command(HeatingControlModeString[index]);
+  HeatPump.SetHeatingControlMode(&command, BOTH);
+  sender->setState(index); // report the selected option back to the HA panel
+}
+void onDHWBoostCommand(bool state, HASwitch* sender){
+  HeatPump.ForceDHW(state);
+  sender->setState(state);
+}
+void setupSensors()
+{
+  outsideTemp.setIcon("mdi:thermometer");
+  outsideTemp.setName("Temperature outside");
+  outsideTemp.setUnitOfMeasurement("°C");
 
+  hotWaterTimerActive.setIcon("mdi:timer");
+  hotWaterTimerActive.setName("Hot water timer active");
+
+  hotWaterControlMode.setIcon("mdi:home");
+  hotWaterControlMode.setName("Hot water control mode");
+
+  legionellaSetpoint.setIcon("mdi:thermometer");
+  legionellaSetpoint.setName("Legionella setpoint");
+  legionellaSetpoint.setUnitOfMeasurement("°C");
+
+  hotWaterMaximumTempDrop.setIcon("mdi:thermometer");
+  hotWaterMaximumTempDrop.setName("Hot water maximum temperature drop");
+  hotWaterMaximumTempDrop.setUnitOfMeasurement("°C");
+
+  heaterOutputFlowTemperature.setIcon("mdi:thermometer");
+  heaterOutputFlowTemperature.setName("Heater output flow temperature");
+  heaterOutputFlowTemperature.setUnitOfMeasurement("°C");
+
+  heaterReturnFlowTemperature.setIcon("mdi:thermometer");
+  heaterReturnFlowTemperature.setName("Heater return flow temperature");
+  heaterReturnFlowTemperature.setUnitOfMeasurement("°C");
+
+  heaterFlowSetpoint.setIcon("mdi:thermometer");
+  heaterFlowSetpoint.setName("Heater flow setpoint");
+  heaterFlowSetpoint.setUnitOfMeasurement("°C");
+
+  outputPower.setIcon("mdi:power-plug");
+  outputPower.setName("Output power");
+  outputPower.setUnitOfMeasurement("W");
+
+  primaryFlowRate.setIcon("mdi:water-pump");
+  primaryFlowRate.setName("Primary flow rate");
+  primaryFlowRate.setUnitOfMeasurement("L/min");
+
+  systemOperationMode.setIcon("mdi:home");
+  systemOperationMode.setName("System operation mode");
+
+  systemPowerMode.setOptions("Standby;On");
+  systemPowerMode.onCommand(onSelectPowerCommand);
+  systemPowerMode.setIcon("mdi:power");
+  systemPowerMode.setName("System power mode");
+
+  heatingControlMode.setOptions("Temperature Control;Fixed Flow;Compensation Flow");
+  heatingControlMode.onCommand(onSelectHeatingCommand);
+  heatingControlMode.setIcon("mdi:fire");
+  heatingControlMode.setName("Heating control mode");
+
+  zone1.onTargetTemperatureCommand(onZone1TargetTemperatureCommand);
+  zone1.setName("Zone 1");
+  zone1.setMinTemp(5);
+  zone1.setMaxTemp(60);
+  zone1.setTempStep(1);
+  zone1.setModes(HAHVAC::UnknownMode);
+
+  zone2.onTargetTemperatureCommand(onZone2TargetTemperatureCommand);
+  zone2.setName("Zone 2");
+  zone2.setMinTemp(5);
+  zone2.setMaxTemp(60);
+  zone2.setTempStep(1);
+  zone2.setModes(HAHVAC::UnknownMode);
+
+  hotWater.onTargetTemperatureCommand(onhotWaterSetpointCommand);
+  hotWater.setName("Hotwater");
+  hotWater.setMinTemp(5);
+  hotWater.setMaxTemp(60);
+  hotWater.setTempStep(1);
+  hotWater.setModes(HAHVAC::UnknownMode);
+
+  zone1FlowTemperatureSetpoint.setIcon("mdi:thermometer");
+  zone1FlowTemperatureSetpoint.setName("Zone 1 flow temperature setpoint");
+  zone1FlowTemperatureSetpoint.setUnitOfMeasurement("°C");
+
+  zone2FlowTemperatureSetpoint.setIcon("mdi:thermometer");
+  zone2FlowTemperatureSetpoint.setName("Zone 2 flow temperature setpoint");
+  zone2FlowTemperatureSetpoint.setUnitOfMeasurement("°C");
+
+  consumedHeatingEnergy.setIcon("mdi:power-plug");
+  consumedHeatingEnergy.setName("Consumed heating energy");
+  consumedHeatingEnergy.setUnitOfMeasurement("kWh");
+
+  consumedHotWaterEnergy.setIcon("mdi:power-plug");
+  consumedHotWaterEnergy.setName("Consumed hot water energy");
+  consumedHotWaterEnergy.setUnitOfMeasurement("kWh");
+
+  deliveredHeatingEnergy.setIcon("mdi:power-plug");
+  deliveredHeatingEnergy.setName("Delivered heating energy");
+  deliveredHeatingEnergy.setUnitOfMeasurement("kWh");
+
+  deliveredHotWaterEnergy.setIcon("mdi:power-plug");
+  deliveredHotWaterEnergy.setName("Delivered hot water energy");
+  deliveredHotWaterEnergy.setUnitOfMeasurement("kWh");
+
+  compressorFrequency.setIcon("mdi:flash");
+  compressorFrequency.setName("Compressor frequency");
+  compressorFrequency.setUnitOfMeasurement("Hz");
+
+  runHours.setIcon("mdi:timer");
+  runHours.setName("Run hours");
+  runHours.setUnitOfMeasurement("h");
+
+  flowTempMax.setIcon("mdi:thermometer");
+  flowTempMax.setName("Flow temperature max");
+  flowTempMax.setUnitOfMeasurement("°C");
+
+  flowTempMin.setIcon("mdi:thermometer");
+  flowTempMin.setName("Flow temperature min");
+  flowTempMin.setUnitOfMeasurement("°C");
+
+  unknownMSG5.setIcon("mdi:alert");
+  unknownMSG5.setName("Unknown MSG5");
+
+  defrost.setIcon("mdi:snowflake-melt");
+  defrost.setName("Defrost");
+
+  DHWBoost.setIcon("mdi:fire");
+  DHWBoost.setName("Hot Water Boost");
+  DHWBoost.onCommand(onDHWBoostCommand);
+}
 
 void setup()
 {
