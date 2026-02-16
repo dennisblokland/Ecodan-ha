@@ -42,6 +42,9 @@ uint8_t ECODANDECODER::Process(uint8_t c)
         case 0x01 :
           Process0x01(RxMessage.Payload, &Status);
           break;
+        case 0x02 :
+          Process0x02(RxMessage.Payload, &Status);
+          break;
         case 0x04 :
           Process0x04(RxMessage.Payload, &Status);
           break;

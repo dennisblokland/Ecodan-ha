@@ -21,6 +21,7 @@
 #include <ArduinoJson.h>
 #include <ESPTelnet.h>
 #include <ArduinoHA.h>
+#include <math.h>
 
 #include "Ecodan.h"
 #include "config.h"
@@ -89,11 +90,58 @@ HAHVAC zone1(
 
 HAHVAC zone2(
     "zone2",
-    HAHVAC::TargetTemperatureFeature| HAHVAC::ModesFeature);
+    HAHVAC::TargetTemperatureFeature | HAHVAC::ModesFeature);
 
 HAHVAC hotWater(
     "hotWater",
-    HAHVAC::TargetTemperatureFeature| HAHVAC::ModesFeature);
+    HAHVAC::TargetTemperatureFeature | HAHVAC::ModesFeature);
+
+namespace
+{
+bool updateNumberIfChanged(HASensorNumber &sensor, float value, float &last)
+{
+  if (isnan(last) || fabsf(value - last) > 0.01f)
+  {
+    sensor.setValue(value);
+    last = value;
+    return true;
+  }
+  return false;
+}
+
+bool updateUInt8IfChanged(HASensorNumber &sensor, uint8_t value, uint8_t &last)
+{
+  if (value != last)
+  {
+    sensor.setValue(value);
+    last = value;
+    return true;
+  }
+  return false;
+}
+
+bool updateBinaryIfChanged(HABinarySensor &sensor, bool value, bool &last)
+{
+  if (value != last)
+  {
+    sensor.setState(value);
+    last = value;
+    return true;
+  }
+  return false;
+}
+
+bool updateSelectIfChanged(HASelect &sensor, uint8_t value, uint8_t &last)
+{
+  if (value != last)
+  {
+    sensor.setState(value);
+    last = value;
+    return true;
+  }
+  return false;
+}
+}
 
 void loop()
 {
@@ -138,55 +186,132 @@ void HeatPumpKeepAlive(void)
 
 void Zone1Report(void)
 {
-  zone1.setCurrentTemperature(HeatPump.Status.Zone1Temperature);
-  zone1.setTargetTemperature(HeatPump.Status.Zone1TemperatureSetpoint);
+  static float lastCurrent = NAN;
+  static float lastTarget = NAN;
+
+  if (isnan(lastCurrent) || fabsf(HeatPump.Status.Zone1Temperature - lastCurrent) > 0.01f)
+  {
+    zone1.setCurrentTemperature(HeatPump.Status.Zone1Temperature);
+    lastCurrent = HeatPump.Status.Zone1Temperature;
+  }
+  if (isnan(lastTarget) || fabsf(HeatPump.Status.Zone1TemperatureSetpoint - lastTarget) > 0.01f)
+  {
+    zone1.setTargetTemperature(HeatPump.Status.Zone1TemperatureSetpoint);
+    lastTarget = HeatPump.Status.Zone1TemperatureSetpoint;
+  }
 }
 
 void Zone2Report(void)
 {
-  zone2.setCurrentTemperature(HeatPump.Status.Zone2Temperature);
-  zone2.setTargetTemperature(HeatPump.Status.Zone2TemperatureSetpoint);
+  static float lastCurrent = NAN;
+  static float lastTarget = NAN;
+
+  if (isnan(lastCurrent) || fabsf(HeatPump.Status.Zone2Temperature - lastCurrent) > 0.01f)
+  {
+    zone2.setCurrentTemperature(HeatPump.Status.Zone2Temperature);
+    lastCurrent = HeatPump.Status.Zone2Temperature;
+  }
+  if (isnan(lastTarget) || fabsf(HeatPump.Status.Zone2TemperatureSetpoint - lastTarget) > 0.01f)
+  {
+    zone2.setTargetTemperature(HeatPump.Status.Zone2TemperatureSetpoint);
+    lastTarget = HeatPump.Status.Zone2TemperatureSetpoint;
+  }
 }
 
 void HotWaterReport(void)
 {
-  hotWater.setCurrentTemperature(HeatPump.Status.HotWaterTemperature);
-  hotWater.setTargetTemperature(HeatPump.Status.HotWaterSetpoint);
+  static float lastCurrent = NAN;
+  static float lastTarget = NAN;
+  static bool lastBoost = false;
+  static bool lastTimerActive = false;
+  static uint8_t lastControlMode = 0xFF;
+  static float lastLegionella = NAN;
+  static float lastDrop = NAN;
 
-  DHWBoost.setState(HeatPump.Status.HotWaterBoostActive);
-  hotWaterTimerActive.setState(HeatPump.Status.HotWaterTimerActive);
-  hotWaterControlMode.setValue(HowWaterControlModeString[HeatPump.Status.HotWaterControlMode]);
-  legionellaSetpoint.setValue(HeatPump.Status.LegionellaSetpoint);
-  hotWaterMaximumTempDrop.setValue(HeatPump.Status.HotWaterMaximumTempDrop);
+  if (isnan(lastCurrent) || fabsf(HeatPump.Status.HotWaterTemperature - lastCurrent) > 0.01f)
+  {
+    hotWater.setCurrentTemperature(HeatPump.Status.HotWaterTemperature);
+    lastCurrent = HeatPump.Status.HotWaterTemperature;
+  }
+  if (isnan(lastTarget) || fabsf(HeatPump.Status.HotWaterSetpoint - lastTarget) > 0.01f)
+  {
+    hotWater.setTargetTemperature(HeatPump.Status.HotWaterSetpoint);
+    lastTarget = HeatPump.Status.HotWaterSetpoint;
+  }
+
+  if (HeatPump.Status.HotWaterBoostActive != lastBoost)
+  {
+    DHWBoost.setState(HeatPump.Status.HotWaterBoostActive);
+    lastBoost = HeatPump.Status.HotWaterBoostActive;
+  }
+  updateBinaryIfChanged(hotWaterTimerActive, HeatPump.Status.HotWaterTimerActive, lastTimerActive);
+  if (HeatPump.Status.HotWaterControlMode != lastControlMode)
+  {
+    hotWaterControlMode.setValue(HowWaterControlModeString[HeatPump.Status.HotWaterControlMode]);
+    lastControlMode = HeatPump.Status.HotWaterControlMode;
+  }
+  updateNumberIfChanged(legionellaSetpoint, HeatPump.Status.LegionellaSetpoint, lastLegionella);
+  updateNumberIfChanged(hotWaterMaximumTempDrop, HeatPump.Status.HotWaterMaximumTempDrop, lastDrop);
 }
 
 void SystemReport(void)
 {
-  heaterOutputFlowTemperature.setValue(HeatPump.Status.HeaterOutputFlowTemperature);
-  heaterReturnFlowTemperature.setValue(HeatPump.Status.HeaterReturnFlowTemperature);
-  heaterFlowSetpoint.setValue(HeatPump.Status.HeaterFlowSetpoint);
-  outputPower.setValue(HeatPump.Status.OutputPower);
-  systemPowerMode.setState(HeatPump.Status.SystemPowerMode);
-  systemOperationMode.setValue(SystemOperationModeString[HeatPump.Status.SystemOperationMode]);
-  heatingControlMode.setState(HeatPump.Status.HeatingControlMode);
-  primaryFlowRate.setValue(HeatPump.Status.PrimaryFlowRate);
-  outsideTemp.setValue(HeatPump.Status.OutsideTemperature);
+  static float lastOutputFlow = NAN;
+  static float lastReturnFlow = NAN;
+  static float lastFlowSetpoint = NAN;
+  static uint8_t lastOutputPower = 0xFF;
+  static uint8_t lastSystemPowerMode = 0xFF;
+  static uint8_t lastSystemOperationMode = 0xFF;
+  static uint8_t lastHeatingControlMode = 0xFF;
+  static uint8_t lastPrimaryFlow = 0xFF;
+  static float lastOutsideTemp = NAN;
+
+  updateNumberIfChanged(heaterOutputFlowTemperature, HeatPump.Status.HeaterOutputFlowTemperature, lastOutputFlow);
+  updateNumberIfChanged(heaterReturnFlowTemperature, HeatPump.Status.HeaterReturnFlowTemperature, lastReturnFlow);
+  updateNumberIfChanged(heaterFlowSetpoint, HeatPump.Status.HeaterFlowSetpoint, lastFlowSetpoint);
+  updateUInt8IfChanged(outputPower, HeatPump.Status.OutputPower, lastOutputPower);
+  updateSelectIfChanged(systemPowerMode, HeatPump.Status.SystemPowerMode, lastSystemPowerMode);
+  if (HeatPump.Status.SystemOperationMode != lastSystemOperationMode)
+  {
+    systemOperationMode.setValue(SystemOperationModeString[HeatPump.Status.SystemOperationMode]);
+    lastSystemOperationMode = HeatPump.Status.SystemOperationMode;
+  }
+  updateSelectIfChanged(heatingControlMode, HeatPump.Status.HeatingControlMode, lastHeatingControlMode);
+  updateUInt8IfChanged(primaryFlowRate, HeatPump.Status.PrimaryFlowRate, lastPrimaryFlow);
+  updateNumberIfChanged(outsideTemp, HeatPump.Status.OutsideTemperature, lastOutsideTemp);
 }
 
 void TestReport(void)
 {
-  zone1FlowTemperatureSetpoint.setValue(HeatPump.Status.Zone1FlowTemperatureSetpoint);
-  zone2FlowTemperatureSetpoint.setValue(HeatPump.Status.Zone2FlowTemperatureSetpoint);
-  consumedHeatingEnergy.setValue(HeatPump.Status.ConsumedHeatingEnergy);
-  consumedHotWaterEnergy.setValue(HeatPump.Status.ConsumedHotWaterEnergy);
-  deliveredHeatingEnergy.setValue(HeatPump.Status.DeliveredHeatingEnergy);
-  deliveredHeatingEnergy.setValue(HeatPump.Status.DeliveredHeatingEnergy);
-  compressorFrequency.setValue(HeatPump.Status.CompressorFrequency);
-  runHours.setValue(HeatPump.Status.RunHours);
-  flowTempMax.setValue(HeatPump.Status.FlowTempMax);
-  flowTempMin.setValue(HeatPump.Status.FlowTempMin);
-  unknownMSG5.setValue(HeatPump.Status.UnknownMSG5);
-  defrost.setState(HeatPump.Status.Defrost);
+  static float lastZone1Flow = NAN;
+  static float lastZone2Flow = NAN;
+  static float lastConsumedHeating = NAN;
+  static float lastConsumedHotWater = NAN;
+  static float lastDeliveredHeating = NAN;
+  static float lastDeliveredHotWater = NAN;
+  static uint8_t lastCompressorFrequency = 0xFF;
+  static uint32_t lastRunHours = 0xFFFFFFFF;
+  static float lastFlowTempMax = NAN;
+  static float lastFlowTempMin = NAN;
+  static uint8_t lastUnknownMsg5 = 0xFF;
+  static bool lastDefrost = false;
+
+  updateNumberIfChanged(zone1FlowTemperatureSetpoint, HeatPump.Status.Zone1FlowTemperatureSetpoint, lastZone1Flow);
+  updateNumberIfChanged(zone2FlowTemperatureSetpoint, HeatPump.Status.Zone2FlowTemperatureSetpoint, lastZone2Flow);
+  updateNumberIfChanged(consumedHeatingEnergy, HeatPump.Status.ConsumedHeatingEnergy, lastConsumedHeating);
+  updateNumberIfChanged(consumedHotWaterEnergy, HeatPump.Status.ConsumedHotWaterEnergy, lastConsumedHotWater);
+  updateNumberIfChanged(deliveredHeatingEnergy, HeatPump.Status.DeliveredHeatingEnergy, lastDeliveredHeating);
+  updateNumberIfChanged(deliveredHotWaterEnergy, HeatPump.Status.DeliveredHotWaterEnergy, lastDeliveredHotWater);
+  updateUInt8IfChanged(compressorFrequency, HeatPump.Status.CompressorFrequency, lastCompressorFrequency);
+  if (HeatPump.Status.RunHours != lastRunHours)
+  {
+    runHours.setValue(HeatPump.Status.RunHours);
+    lastRunHours = HeatPump.Status.RunHours;
+  }
+  updateNumberIfChanged(flowTempMax, HeatPump.Status.FlowTempMax, lastFlowTempMax);
+  updateNumberIfChanged(flowTempMin, HeatPump.Status.FlowTempMin, lastFlowTempMin);
+  updateUInt8IfChanged(unknownMSG5, HeatPump.Status.UnknownMSG5, lastUnknownMsg5);
+  updateBinaryIfChanged(defrost, HeatPump.Status.Defrost, lastDefrost);
 }
 
 void onTelnetConnect(String ip)
@@ -218,6 +343,7 @@ void onTelnetConnectionAttempt(String ip)
   DEBUG_PRINT(ip);
   DEBUG_PRINTLN(" tried to connected");
 }
+
 void HeatPumpQueryStateEngine(void)
 {
   HeatPump.StatusStateMachine();
@@ -258,6 +384,7 @@ void onZone1TargetTemperatureCommand(HANumeric temperature, HAHVAC *sender)
 
   sender->setTargetTemperature(temperature); // report target temperature back to the HA panel
 }
+
 void onZone2TargetTemperatureCommand(HANumeric temperature, HAHVAC *sender)
 {
   float temperatureFloat = temperature.toFloat();
@@ -266,10 +393,12 @@ void onZone2TargetTemperatureCommand(HANumeric temperature, HAHVAC *sender)
 
   sender->setTargetTemperature(temperature); // report target temperature back to the HA panel
 }
+
 void onhotWaterSetpointCommand(HANumeric number, HAHVAC *sender)
 {
   float temperatureFloat = number.toFloat();
   HeatPump.SetHotWaterSetpoint(temperatureFloat);
+  
   sender->setTargetTemperature(number); // report the selected option back to the HA panel
 }
 void onSelectPowerCommand(int8_t index, HASelect *sender)
@@ -277,21 +406,31 @@ void onSelectPowerCommand(int8_t index, HASelect *sender)
   HeatPump.SetSystemPowerMode(static_cast<ECODAN::PowerState>(index));
   sender->setState(index); // report the selected option back to the HA panel
 }
+
 void onSelectHeatingCommand(int8_t index, HASelect *sender)
 {
+  if (index < 0 || index >= 6)
+  {
+    return;
+  }
   String command(HeatingControlModeString[index]);
   HeatPump.SetHeatingControlMode(&command, BOTH);
   sender->setState(index); // report the selected option back to the HA panel
 }
-void onDHWBoostCommand(bool state, HASwitch* sender){
+
+void onDHWBoostCommand(bool state, HASwitch *sender)
+{
   HeatPump.ForceDHW(state);
   sender->setState(state);
 }
+
 void setupSensors()
 {
   outsideTemp.setIcon("mdi:thermometer");
   outsideTemp.setName("Temperature outside");
   outsideTemp.setUnitOfMeasurement("°C");
+  outsideTemp.setDeviceClass("temperature");
+  outsideTemp.setStateClass("measurement");
 
   hotWaterTimerActive.setIcon("mdi:timer");
   hotWaterTimerActive.setName("Hot water timer active");
@@ -302,30 +441,43 @@ void setupSensors()
   legionellaSetpoint.setIcon("mdi:thermometer");
   legionellaSetpoint.setName("Legionella setpoint");
   legionellaSetpoint.setUnitOfMeasurement("°C");
+  legionellaSetpoint.setDeviceClass("temperature");
+  legionellaSetpoint.setStateClass("measurement");
 
   hotWaterMaximumTempDrop.setIcon("mdi:thermometer");
   hotWaterMaximumTempDrop.setName("Hot water maximum temperature drop");
   hotWaterMaximumTempDrop.setUnitOfMeasurement("°C");
+  hotWaterMaximumTempDrop.setDeviceClass("temperature");
+  hotWaterMaximumTempDrop.setStateClass("measurement");
 
   heaterOutputFlowTemperature.setIcon("mdi:thermometer");
   heaterOutputFlowTemperature.setName("Heater output flow temperature");
   heaterOutputFlowTemperature.setUnitOfMeasurement("°C");
+  heaterOutputFlowTemperature.setDeviceClass("temperature");
+  heaterOutputFlowTemperature.setStateClass("measurement");
 
   heaterReturnFlowTemperature.setIcon("mdi:thermometer");
   heaterReturnFlowTemperature.setName("Heater return flow temperature");
   heaterReturnFlowTemperature.setUnitOfMeasurement("°C");
+  heaterReturnFlowTemperature.setDeviceClass("temperature");
+  heaterReturnFlowTemperature.setStateClass("measurement");
 
   heaterFlowSetpoint.setIcon("mdi:thermometer");
   heaterFlowSetpoint.setName("Heater flow setpoint");
   heaterFlowSetpoint.setUnitOfMeasurement("°C");
+  heaterFlowSetpoint.setDeviceClass("temperature");
+  heaterFlowSetpoint.setStateClass("measurement");
 
   outputPower.setIcon("mdi:power-plug");
   outputPower.setName("Output power");
   outputPower.setUnitOfMeasurement("W");
+  outputPower.setDeviceClass("power");
+  outputPower.setStateClass("measurement");
 
   primaryFlowRate.setIcon("mdi:water-pump");
   primaryFlowRate.setName("Primary flow rate");
   primaryFlowRate.setUnitOfMeasurement("L/min");
+  primaryFlowRate.setStateClass("measurement");
 
   systemOperationMode.setIcon("mdi:home");
   systemOperationMode.setName("System operation mode");
@@ -364,30 +516,43 @@ void setupSensors()
   zone1FlowTemperatureSetpoint.setIcon("mdi:thermometer");
   zone1FlowTemperatureSetpoint.setName("Zone 1 flow temperature setpoint");
   zone1FlowTemperatureSetpoint.setUnitOfMeasurement("°C");
+  zone1FlowTemperatureSetpoint.setDeviceClass("temperature");
+  zone1FlowTemperatureSetpoint.setStateClass("measurement");
 
   zone2FlowTemperatureSetpoint.setIcon("mdi:thermometer");
   zone2FlowTemperatureSetpoint.setName("Zone 2 flow temperature setpoint");
   zone2FlowTemperatureSetpoint.setUnitOfMeasurement("°C");
+  zone2FlowTemperatureSetpoint.setDeviceClass("temperature");
+  zone2FlowTemperatureSetpoint.setStateClass("measurement");
 
   consumedHeatingEnergy.setIcon("mdi:power-plug");
   consumedHeatingEnergy.setName("Consumed heating energy");
   consumedHeatingEnergy.setUnitOfMeasurement("kWh");
+  consumedHeatingEnergy.setDeviceClass("energy");
+  consumedHeatingEnergy.setStateClass("total_increasing");
 
   consumedHotWaterEnergy.setIcon("mdi:power-plug");
   consumedHotWaterEnergy.setName("Consumed hot water energy");
   consumedHotWaterEnergy.setUnitOfMeasurement("kWh");
+  consumedHotWaterEnergy.setDeviceClass("energy");
+  consumedHotWaterEnergy.setStateClass("total_increasing");
 
   deliveredHeatingEnergy.setIcon("mdi:power-plug");
   deliveredHeatingEnergy.setName("Delivered heating energy");
   deliveredHeatingEnergy.setUnitOfMeasurement("kWh");
+  deliveredHeatingEnergy.setDeviceClass("energy");
+  deliveredHeatingEnergy.setStateClass("total_increasing");
 
   deliveredHotWaterEnergy.setIcon("mdi:power-plug");
   deliveredHotWaterEnergy.setName("Delivered hot water energy");
   deliveredHotWaterEnergy.setUnitOfMeasurement("kWh");
+  deliveredHotWaterEnergy.setDeviceClass("energy");
+  deliveredHotWaterEnergy.setStateClass("total_increasing");
 
   compressorFrequency.setIcon("mdi:flash");
   compressorFrequency.setName("Compressor frequency");
   compressorFrequency.setUnitOfMeasurement("Hz");
+  compressorFrequency.setStateClass("measurement");
 
   runHours.setIcon("mdi:timer");
   runHours.setName("Run hours");
@@ -396,10 +561,14 @@ void setupSensors()
   flowTempMax.setIcon("mdi:thermometer");
   flowTempMax.setName("Flow temperature max");
   flowTempMax.setUnitOfMeasurement("°C");
+  flowTempMax.setDeviceClass("temperature");
+  flowTempMax.setStateClass("measurement");
 
   flowTempMin.setIcon("mdi:thermometer");
   flowTempMin.setName("Flow temperature min");
   flowTempMin.setUnitOfMeasurement("°C");
+  flowTempMin.setDeviceClass("temperature");
+  flowTempMin.setStateClass("measurement");
 
   unknownMSG5.setIcon("mdi:alert");
   unknownMSG5.setName("Unknown MSG5");
@@ -425,6 +594,11 @@ void setup()
   Serial.begin(115200);
   // wifiManager.resetSettings(); //reset settings - for testing
 
+  HostName = "EcodanBridge-";
+  uint32_t chipID = ESP.getEfuseMac();
+  HostName += String(chipID, HEX);
+  WiFi.hostname(HostName);
+
   MyWifiManager.setTimeout(180);
   Serial.println("Starting Wifi Manager");
   if (!MyWifiManager.autoConnect("Ecodan Bridge AP"))
@@ -433,10 +607,6 @@ void setup()
     ESP.restart();
     delay(5000);
   }
-  HostName = "EcodanBridge-";
-  uint32_t chipID = ESP.getEfuseMac();
-  HostName += String(chipID, HEX);
-  WiFi.hostname(HostName);
 
   setupTelnet();
 
