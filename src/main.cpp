@@ -22,6 +22,7 @@
 #include <ESPTelnet.h>
 #include <ArduinoHA.h>
 #include <math.h>
+#include <string.h>
 
 #include "Ecodan.h"
 #include "config.h"
@@ -62,24 +63,78 @@ HASensorNumber heaterOutputFlowTemperature("heaterOutputFlowTemperature", HASens
 HASensorNumber heaterReturnFlowTemperature("heaterReturnFlowTemperature", HASensorNumber::PrecisionP1);
 HASensorNumber heaterFlowSetpoint("heaterFlowSetpoint", HASensorNumber::PrecisionP1);
 HASensorNumber outputPower("outputPower", HASensorNumber::PrecisionP1);
+HASensorNumber inputPowerBand("inputPowerBand", HASensorNumber::PrecisionP0);
+HASensorNumber heaterPower("heaterPower", HASensorNumber::PrecisionP0);
+HASensorNumber totalInputEnergy("totalInputEnergy", HASensorNumber::PrecisionP1);
+HASensorNumber dhwTempDropMode("dhwTempDropMode", HASensorNumber::PrecisionP0);
 HASensorNumber primaryFlowRate("primaryFlowRate", HASensorNumber::PrecisionP0);
+HASensorNumber externalBoilerFlowTemperature("externalBoilerFlowTemperature", HASensorNumber::PrecisionP1);
+HASensorNumber externalBoilerReturnTemperature("externalBoilerReturnTemperature", HASensorNumber::PrecisionP1);
+HASensorNumber zone1FlowTemperature("zone1FlowTemperature", HASensorNumber::PrecisionP1);
+HASensorNumber zone1ReturnTemperature("zone1ReturnTemperature", HASensorNumber::PrecisionP1);
+HASensorNumber zone2FlowTemperature("zone2FlowTemperature", HASensorNumber::PrecisionP1);
+HASensorNumber zone2ReturnTemperature("zone2ReturnTemperature", HASensorNumber::PrecisionP1);
+HASensorNumber mixingTankTemperature("mixingTankTemperature", HASensorNumber::PrecisionP1);
+HASensorNumber condensingTemperature("condensingTemperature", HASensorNumber::PrecisionP1);
+HASensorNumber thermistorUnknownTemperature("thermistorUnknownTemperature", HASensorNumber::PrecisionP1);
+HASensorNumber outdoorDischargeTemperature("outdoorDischargeTemperature", HASensorNumber::PrecisionP0);
+HASensorNumber outdoorLiquidPipeTemperature("outdoorLiquidPipeTemperature", HASensorNumber::PrecisionP1);
+HASensorNumber outdoorTwoPhaseTemperature("outdoorTwoPhaseTemperature", HASensorNumber::PrecisionP1);
+HASensorNumber outdoorSuctionTemperature("outdoorSuctionTemperature", HASensorNumber::PrecisionP1);
+HASensorNumber outdoorHeatSinkTemperature("outdoorHeatSinkTemperature", HASensorNumber::PrecisionP0);
+HASensorNumber outdoorCompressorSurfaceTemperature("outdoorCompressorSurfaceTemperature", HASensorNumber::PrecisionP0);
+HASensorNumber superheat("superheat", HASensorNumber::PrecisionP0);
+HASensorNumber subcooling("subcooling", HASensorNumber::PrecisionP1);
+HASensorNumber refrigerantTemperature("refrigerantTemperature", HASensorNumber::PrecisionP1);
+HASensorNumber unknownTemperature("unknownTemperature", HASensorNumber::PrecisionP1);
+HASensorNumber protocolVersion("protocolVersion", HASensorNumber::PrecisionP0);
+HASensorNumber modelVersion("modelVersion", HASensorNumber::PrecisionP0);
+HASensorNumber supplyCapacity("supplyCapacity", HASensorNumber::PrecisionP0);
+HASensorNumber ftcVersion("ftcVersion", HASensorNumber::PrecisionP0);
 HASensorNumber zone1FlowTemperatureSetpoint("zone1FlowTemperatureSetpoint", HASensorNumber::PrecisionP1);
 HASensorNumber zone2FlowTemperatureSetpoint("zone2FlowTemperatureSetpoint", HASensorNumber::PrecisionP1);
 HASensorNumber consumedHeatingEnergy("consumedHeatingEnergy", HASensorNumber::PrecisionP1);
+HASensorNumber consumedCoolingEnergy("consumedCoolingEnergy", HASensorNumber::PrecisionP1);
 HASensorNumber consumedHotWaterEnergy("consumedHotWaterEnergy", HASensorNumber::PrecisionP1);
 HASensorNumber deliveredHeatingEnergy("deliveredHeatingEnergy", HASensorNumber::PrecisionP1);
+HASensorNumber deliveredCoolingEnergy("deliveredCoolingEnergy", HASensorNumber::PrecisionP1);
 HASensorNumber deliveredHotWaterEnergy("deliveredHotWaterEnergy", HASensorNumber::PrecisionP1);
+HASensorNumber hotWaterTemperature2("hotWaterTemperature2", HASensorNumber::PrecisionP1);
+HASensorNumber faultCodeNumber("faultCodeNumber", HASensorNumber::PrecisionP0);
+HASensorNumber refrigerantFaultCode("refrigerantFaultCode", HASensorNumber::PrecisionP0);
+HASensorNumber multiZoneRunning("multiZoneRunning", HASensorNumber::PrecisionP0);
+HASensorNumber faultStatus("faultStatus", HASensorNumber::PrecisionP0);
 HASensorNumber compressorFrequency("compressorFrequency", HASensorNumber::PrecisionP0);
 HASensorNumber runHours("runHours", HASensorNumber::PrecisionP0);
 HASensorNumber flowTempMax("flowTempMax", HASensorNumber::PrecisionP1);
 HASensorNumber flowTempMin("flowTempMin", HASensorNumber::PrecisionP1);
-HASensorNumber unknownMSG5("unknownMSG5", HASensorNumber::PrecisionP0);
+HASensorNumber mixingValveStatus("mixingValveStatus", HASensorNumber::PrecisionP0);
 
 HABinarySensor hotWaterTimerActive("hotWaterTimerActive");
 HABinarySensor defrost("defrost");
+HABinarySensor holidayModeActive("holidayModeActive");
+HABinarySensor forcedDHWActive("forcedDHWActive");
+HABinarySensor serverControlModeActive("serverControlModeActive");
+HABinarySensor thermostat1Active("thermostat1Active");
+HABinarySensor thermostat2Active("thermostat2Active");
+HABinarySensor outdoorThermostatActive("outdoorThermostatActive");
+HABinarySensor boosterHeater1Active("boosterHeater1Active");
+HABinarySensor boosterHeater2Active("boosterHeater2Active");
+HABinarySensor immersionHeaterActive("immersionHeaterActive");
+HABinarySensor pump1Active("pump1Active");
+HABinarySensor pump2Active("pump2Active");
+HABinarySensor pump3Active("pump3Active");
+HABinarySensor valve1Active("valve1Active");
+HABinarySensor valve2Active("valve2Active");
 
 HASensor hotWaterControlMode("hotWaterControlMode");
 HASensor systemOperationMode("systemOperationMode");
+HASensor systemDateTime("systemDateTime");
+HASensor consumedEnergyDateTime("consumedEnergyDateTime");
+HASensor deliveredEnergyDateTime("deliveredEnergyDateTime");
+HASensor heatSource("heatSource");
+HASensor heatSourcePhase("heatSourcePhase");
+HASensor errorCode("errorCode");
 HASelect heatingControlMode("heatingControlMode");
 HASwitch DHWBoost("DHWBoost");
 HASelect systemPowerMode("systemPowerMode");
@@ -140,6 +195,80 @@ bool updateSelectIfChanged(HASelect &sensor, uint8_t value, uint8_t &last)
     return true;
   }
   return false;
+}
+
+bool updateTextIfChanged(HASensor &sensor, const char *value, char *last, size_t lastSize)
+{
+  if (strncmp(value, last, lastSize) != 0)
+  {
+    sensor.setValue(value);
+    strncpy(last, value, lastSize - 1);
+    last[lastSize - 1] = '\0';
+    return true;
+  }
+  return false;
+}
+
+bool formatTimestamp(const tm &timestamp, char *buffer, size_t bufferSize)
+{
+  if (timestamp.tm_year == 0 && timestamp.tm_mon == 0 && timestamp.tm_mday == 0 &&
+      timestamp.tm_hour == 0 && timestamp.tm_min == 0 && timestamp.tm_sec == 0)
+  {
+    return false;
+  }
+
+  int year = 2000 + timestamp.tm_year;
+  snprintf(buffer, bufferSize, "%04d-%02d-%02d %02d:%02d:%02d",
+           year,
+           timestamp.tm_mon,
+           timestamp.tm_mday,
+           timestamp.tm_hour,
+           timestamp.tm_min,
+           timestamp.tm_sec);
+  return true;
+}
+
+const char *heatSourceLabel(uint8_t value)
+{
+  switch (value)
+  {
+    case 0:
+      return "Heatpump";
+    case 1:
+      return "Immersion";
+    case 2:
+      return "Booster";
+    case 3:
+      return "Booster+Immersion";
+    case 4:
+      return "Boiler";
+    default:
+      return "Unknown";
+  }
+}
+
+const char *heatSourcePhaseLabel(uint8_t value)
+{
+  switch (value)
+  {
+    case 0:
+      return "Normal";
+    case 1:
+      return "Heatpump";
+    case 2:
+      return "Heater";
+    default:
+      return "Unknown";
+  }
+}
+
+char safeLetter(char value)
+{
+  if (value >= 32 && value <= 126)
+  {
+    return value;
+  }
+  return '-';
 }
 }
 
@@ -265,11 +394,73 @@ void SystemReport(void)
   static uint8_t lastHeatingControlMode = 0xFF;
   static uint8_t lastPrimaryFlow = 0xFF;
   static float lastOutsideTemp = NAN;
+  static float lastExternalBoilerFlow = NAN;
+  static float lastExternalBoilerReturn = NAN;
+  static float lastZone1FlowTemp = NAN;
+  static float lastZone1ReturnTemp = NAN;
+  static float lastZone2FlowTemp = NAN;
+  static float lastZone2ReturnTemp = NAN;
+  static float lastMixingTankTemp = NAN;
+  static float lastCondensingTemp = NAN;
+  static float lastThermistorUnknownTemp = NAN;
+  static float lastOutdoorDischargeTemp = NAN;
+  static float lastOutdoorLiquidPipeTemp = NAN;
+  static float lastOutdoorTwoPhaseTemp = NAN;
+  static float lastOutdoorSuctionTemp = NAN;
+  static float lastOutdoorHeatSinkTemp = NAN;
+  static float lastOutdoorCompressorSurfaceTemp = NAN;
+  static float lastSuperheat = NAN;
+  static float lastSubcooling = NAN;
+  static float lastRefrigerantTemp = NAN;
+  static uint8_t lastProtocolVersion = 0xFF;
+  static uint8_t lastModelVersion = 0xFF;
+  static uint8_t lastSupplyCapacity = 0xFF;
+  static uint8_t lastFtcVersion = 0xFF;
+  static float lastUnknownTemp = NAN;
+  static float lastHotWaterTemp2 = NAN;
+  static uint8_t lastInputPowerBand = 0xFF;
+  static uint8_t lastHeaterPower = 0xFF;
+  static float lastTotalInputEnergy = NAN;
+  static uint8_t lastDhwTempDropMode = 0xFF;
+  static char lastHeatSource[24] = "";
+  static char lastHeatSourcePhase[16] = "";
+  static char lastSystemTimestamp[20] = "";
+  char timestamp[20];
 
   updateNumberIfChanged(heaterOutputFlowTemperature, HeatPump.Status.HeaterOutputFlowTemperature, lastOutputFlow);
   updateNumberIfChanged(heaterReturnFlowTemperature, HeatPump.Status.HeaterReturnFlowTemperature, lastReturnFlow);
   updateNumberIfChanged(heaterFlowSetpoint, HeatPump.Status.HeaterFlowSetpoint, lastFlowSetpoint);
+  updateNumberIfChanged(externalBoilerFlowTemperature, HeatPump.Status.ExternalBoilerFlowTemperature, lastExternalBoilerFlow);
+  updateNumberIfChanged(externalBoilerReturnTemperature, HeatPump.Status.ExternalBoilerReturnTemperature, lastExternalBoilerReturn);
+  updateNumberIfChanged(zone1FlowTemperature, HeatPump.Status.Zone1FlowTemperature, lastZone1FlowTemp);
+  updateNumberIfChanged(zone1ReturnTemperature, HeatPump.Status.Zone1ReturnTemperature, lastZone1ReturnTemp);
+  updateNumberIfChanged(zone2FlowTemperature, HeatPump.Status.Zone2FlowTemperature, lastZone2FlowTemp);
+  updateNumberIfChanged(zone2ReturnTemperature, HeatPump.Status.Zone2ReturnTemperature, lastZone2ReturnTemp);
+  updateNumberIfChanged(mixingTankTemperature, HeatPump.Status.MixingTankTemperature, lastMixingTankTemp);
+  updateNumberIfChanged(condensingTemperature, HeatPump.Status.CondensingTemperature, lastCondensingTemp);
+  updateNumberIfChanged(thermistorUnknownTemperature, HeatPump.Status.ThermistorUnknownTemperature, lastThermistorUnknownTemp);
+  updateNumberIfChanged(outdoorDischargeTemperature, HeatPump.Status.OutdoorDischargeTemperature, lastOutdoorDischargeTemp);
+  updateNumberIfChanged(outdoorLiquidPipeTemperature, HeatPump.Status.OutdoorLiquidPipeTemperature, lastOutdoorLiquidPipeTemp);
+  updateNumberIfChanged(outdoorTwoPhaseTemperature, HeatPump.Status.OutdoorTwoPhaseTemperature, lastOutdoorTwoPhaseTemp);
+  updateNumberIfChanged(outdoorSuctionTemperature, HeatPump.Status.OutdoorSuctionTemperature, lastOutdoorSuctionTemp);
+  updateNumberIfChanged(outdoorHeatSinkTemperature, HeatPump.Status.OutdoorHeatSinkTemperature, lastOutdoorHeatSinkTemp);
+  updateNumberIfChanged(outdoorCompressorSurfaceTemperature, HeatPump.Status.OutdoorCompressorSurfaceTemperature, lastOutdoorCompressorSurfaceTemp);
+  updateNumberIfChanged(superheat, HeatPump.Status.Superheat, lastSuperheat);
+  updateNumberIfChanged(subcooling, HeatPump.Status.Subcooling, lastSubcooling);
+  updateNumberIfChanged(refrigerantTemperature, HeatPump.Status.RefrigerantTemperature, lastRefrigerantTemp);
+  updateUInt8IfChanged(protocolVersion, HeatPump.Status.ProtocolVersion, lastProtocolVersion);
+  updateUInt8IfChanged(modelVersion, HeatPump.Status.ModelVersion, lastModelVersion);
+  updateUInt8IfChanged(supplyCapacity, HeatPump.Status.SupplyCapacity, lastSupplyCapacity);
+  updateUInt8IfChanged(ftcVersion, HeatPump.Status.FtcVersion, lastFtcVersion);
+  updateNumberIfChanged(unknownTemperature, HeatPump.Status.UnknownTemperature, lastUnknownTemp);
+  updateNumberIfChanged(hotWaterTemperature2, HeatPump.Status.HotWaterTemperature2, lastHotWaterTemp2);
   updateUInt8IfChanged(outputPower, HeatPump.Status.OutputPower, lastOutputPower);
+  updateUInt8IfChanged(inputPowerBand, HeatPump.Status.InputPowerBand, lastInputPowerBand);
+  updateUInt8IfChanged(heaterPower, HeatPump.Status.HeaterPower, lastHeaterPower);
+  updateNumberIfChanged(totalInputEnergy, HeatPump.Status.TotalInputEnergy, lastTotalInputEnergy);
+  updateUInt8IfChanged(dhwTempDropMode, HeatPump.Status.DhwTempDropMode, lastDhwTempDropMode);
+  updateTextIfChanged(heatSource, heatSourceLabel(HeatPump.Status.HeatSource), lastHeatSource, sizeof(lastHeatSource));
+  updateTextIfChanged(heatSourcePhase, heatSourcePhaseLabel(HeatPump.Status.HeatSourcePhase), lastHeatSourcePhase, sizeof(lastHeatSourcePhase));
   updateSelectIfChanged(systemPowerMode, HeatPump.Status.SystemPowerMode, lastSystemPowerMode);
   if (HeatPump.Status.SystemOperationMode != lastSystemOperationMode)
   {
@@ -279,6 +470,10 @@ void SystemReport(void)
   updateSelectIfChanged(heatingControlMode, HeatPump.Status.HeatingControlMode, lastHeatingControlMode);
   updateUInt8IfChanged(primaryFlowRate, HeatPump.Status.PrimaryFlowRate, lastPrimaryFlow);
   updateNumberIfChanged(outsideTemp, HeatPump.Status.OutsideTemperature, lastOutsideTemp);
+  if (formatTimestamp(HeatPump.Status.DateTimeStamp, timestamp, sizeof(timestamp)))
+  {
+    updateTextIfChanged(systemDateTime, timestamp, lastSystemTimestamp, sizeof(lastSystemTimestamp));
+  }
 }
 
 void TestReport(void)
@@ -286,21 +481,48 @@ void TestReport(void)
   static float lastZone1Flow = NAN;
   static float lastZone2Flow = NAN;
   static float lastConsumedHeating = NAN;
+  static float lastConsumedCooling = NAN;
   static float lastConsumedHotWater = NAN;
   static float lastDeliveredHeating = NAN;
+  static float lastDeliveredCooling = NAN;
   static float lastDeliveredHotWater = NAN;
   static uint8_t lastCompressorFrequency = 0xFF;
   static uint32_t lastRunHours = 0xFFFFFFFF;
   static float lastFlowTempMax = NAN;
   static float lastFlowTempMin = NAN;
-  static uint8_t lastUnknownMsg5 = 0xFF;
   static bool lastDefrost = false;
+  static bool lastHolidayMode = false;
+  static bool lastForcedDHW = false;
+  static bool lastServerControlMode = false;
+  static bool lastThermostat1 = false;
+  static bool lastThermostat2 = false;
+  static bool lastOutdoorThermostat = false;
+  static bool lastBoosterHeater1 = false;
+  static bool lastBoosterHeater2 = false;
+  static bool lastImmersionHeater = false;
+  static bool lastPump1 = false;
+  static bool lastPump2 = false;
+  static bool lastPump3 = false;
+  static bool lastValve1 = false;
+  static bool lastValve2 = false;
+  static uint8_t lastMixingValveStatus = 0xFF;
+  static uint16_t lastFaultCodeNumber = 0xFFFF;
+  static uint8_t lastRefrigerantFaultCode = 0xFF;
+  static uint8_t lastMultiZoneRunning = 0xFF;
+  static uint8_t lastFaultStatus = 0xFF;
+  static char lastErrorCode[24] = "";
+  static char lastConsumedTimestamp[20] = "";
+  static char lastDeliveredTimestamp[20] = "";
+  char timestamp[20];
+  char errorText[24];
 
   updateNumberIfChanged(zone1FlowTemperatureSetpoint, HeatPump.Status.Zone1FlowTemperatureSetpoint, lastZone1Flow);
   updateNumberIfChanged(zone2FlowTemperatureSetpoint, HeatPump.Status.Zone2FlowTemperatureSetpoint, lastZone2Flow);
   updateNumberIfChanged(consumedHeatingEnergy, HeatPump.Status.ConsumedHeatingEnergy, lastConsumedHeating);
+  updateNumberIfChanged(consumedCoolingEnergy, HeatPump.Status.ConsumedCoolingEnergy, lastConsumedCooling);
   updateNumberIfChanged(consumedHotWaterEnergy, HeatPump.Status.ConsumedHotWaterEnergy, lastConsumedHotWater);
   updateNumberIfChanged(deliveredHeatingEnergy, HeatPump.Status.DeliveredHeatingEnergy, lastDeliveredHeating);
+  updateNumberIfChanged(deliveredCoolingEnergy, HeatPump.Status.DeliveredCoolingEnergy, lastDeliveredCooling);
   updateNumberIfChanged(deliveredHotWaterEnergy, HeatPump.Status.DeliveredHotWaterEnergy, lastDeliveredHotWater);
   updateUInt8IfChanged(compressorFrequency, HeatPump.Status.CompressorFrequency, lastCompressorFrequency);
   if (HeatPump.Status.RunHours != lastRunHours)
@@ -310,8 +532,59 @@ void TestReport(void)
   }
   updateNumberIfChanged(flowTempMax, HeatPump.Status.FlowTempMax, lastFlowTempMax);
   updateNumberIfChanged(flowTempMin, HeatPump.Status.FlowTempMin, lastFlowTempMin);
-  updateUInt8IfChanged(unknownMSG5, HeatPump.Status.UnknownMSG5, lastUnknownMsg5);
   updateBinaryIfChanged(defrost, HeatPump.Status.Defrost, lastDefrost);
+  updateBinaryIfChanged(holidayModeActive, HeatPump.Status.HolidayModeActive, lastHolidayMode);
+  updateBinaryIfChanged(forcedDHWActive, HeatPump.Status.ForcedDHWActive, lastForcedDHW);
+  updateBinaryIfChanged(serverControlModeActive, HeatPump.Status.ServerControlModeActive, lastServerControlMode);
+  updateBinaryIfChanged(thermostat1Active, HeatPump.Status.Thermostat1Active, lastThermostat1);
+  updateBinaryIfChanged(thermostat2Active, HeatPump.Status.Thermostat2Active, lastThermostat2);
+  updateBinaryIfChanged(outdoorThermostatActive, HeatPump.Status.OutdoorThermostatActive, lastOutdoorThermostat);
+  updateBinaryIfChanged(boosterHeater1Active, HeatPump.Status.BoosterHeater1Active, lastBoosterHeater1);
+  updateBinaryIfChanged(boosterHeater2Active, HeatPump.Status.BoosterHeater2Active, lastBoosterHeater2);
+  updateBinaryIfChanged(immersionHeaterActive, HeatPump.Status.ImmersionHeaterActive, lastImmersionHeater);
+  updateBinaryIfChanged(pump1Active, HeatPump.Status.Pump1Active, lastPump1);
+  updateBinaryIfChanged(pump2Active, HeatPump.Status.Pump2Active, lastPump2);
+  updateBinaryIfChanged(pump3Active, HeatPump.Status.Pump3Active, lastPump3);
+  updateBinaryIfChanged(valve1Active, HeatPump.Status.Valve1Active, lastValve1);
+  updateBinaryIfChanged(valve2Active, HeatPump.Status.Valve2Active, lastValve2);
+  if (HeatPump.Status.MixingValveStatus != lastMixingValveStatus)
+  {
+    mixingValveStatus.setValue(HeatPump.Status.MixingValveStatus);
+    lastMixingValveStatus = HeatPump.Status.MixingValveStatus;
+  }
+  if (HeatPump.Status.FaultCodeNumber != lastFaultCodeNumber)
+  {
+    faultCodeNumber.setValue(HeatPump.Status.FaultCodeNumber);
+    lastFaultCodeNumber = HeatPump.Status.FaultCodeNumber;
+  }
+  updateUInt8IfChanged(refrigerantFaultCode, HeatPump.Status.RefrigerantFaultCode, lastRefrigerantFaultCode);
+  updateUInt8IfChanged(multiZoneRunning, HeatPump.Status.MultiZoneRunning, lastMultiZoneRunning);
+  updateUInt8IfChanged(faultStatus, HeatPump.Status.FaultStatus, lastFaultStatus);
+  if (HeatPump.Status.FaultCodeNumber == 0 &&
+      safeLetter(HeatPump.Status.FaultCodeLetter1) == '-' &&
+      safeLetter(HeatPump.Status.FaultCodeLetter2) == '-')
+  {
+    strncpy(errorText, "OK", sizeof(errorText));
+    errorText[sizeof(errorText) - 1] = '\0';
+  }
+  else
+  {
+    snprintf(errorText,
+             sizeof(errorText),
+             "%u%c%c",
+             HeatPump.Status.FaultCodeNumber,
+             safeLetter(HeatPump.Status.FaultCodeLetter1),
+             safeLetter(HeatPump.Status.FaultCodeLetter2));
+  }
+  updateTextIfChanged(errorCode, errorText, lastErrorCode, sizeof(lastErrorCode));
+  if (formatTimestamp(HeatPump.Status.ConsumedDateTimeStamp, timestamp, sizeof(timestamp)))
+  {
+    updateTextIfChanged(consumedEnergyDateTime, timestamp, lastConsumedTimestamp, sizeof(lastConsumedTimestamp));
+  }
+  if (formatTimestamp(HeatPump.Status.DeliveredDateTimeStamp, timestamp, sizeof(timestamp)))
+  {
+    updateTextIfChanged(deliveredEnergyDateTime, timestamp, lastDeliveredTimestamp, sizeof(lastDeliveredTimestamp));
+  }
 }
 
 void onTelnetConnect(String ip)
@@ -468,6 +741,153 @@ void setupSensors()
   heaterFlowSetpoint.setDeviceClass("temperature");
   heaterFlowSetpoint.setStateClass("measurement");
 
+  inputPowerBand.setIcon("mdi:flash");
+  inputPowerBand.setName("Input power band");
+  inputPowerBand.setUnitOfMeasurement("kW");
+  inputPowerBand.setDeviceClass("power");
+  inputPowerBand.setStateClass("measurement");
+
+  heaterPower.setIcon("mdi:flash");
+  heaterPower.setName("Heater power");
+  heaterPower.setUnitOfMeasurement("kW");
+  heaterPower.setDeviceClass("power");
+  heaterPower.setStateClass("measurement");
+
+  totalInputEnergy.setIcon("mdi:counter");
+  totalInputEnergy.setName("Total input energy");
+  totalInputEnergy.setUnitOfMeasurement("kWh");
+  totalInputEnergy.setDeviceClass("energy");
+  totalInputEnergy.setStateClass("total_increasing");
+
+  dhwTempDropMode.setIcon("mdi:water");
+  dhwTempDropMode.setName("DHW temp drop mode");
+
+  externalBoilerFlowTemperature.setIcon("mdi:thermometer");
+  externalBoilerFlowTemperature.setName("External boiler flow temperature");
+  externalBoilerFlowTemperature.setUnitOfMeasurement("°C");
+  externalBoilerFlowTemperature.setDeviceClass("temperature");
+  externalBoilerFlowTemperature.setStateClass("measurement");
+
+  externalBoilerReturnTemperature.setIcon("mdi:thermometer");
+  externalBoilerReturnTemperature.setName("External boiler return temperature");
+  externalBoilerReturnTemperature.setUnitOfMeasurement("°C");
+  externalBoilerReturnTemperature.setDeviceClass("temperature");
+  externalBoilerReturnTemperature.setStateClass("measurement");
+
+  zone1FlowTemperature.setIcon("mdi:thermometer");
+  zone1FlowTemperature.setName("Zone 1 flow temperature");
+  zone1FlowTemperature.setUnitOfMeasurement("°C");
+  zone1FlowTemperature.setDeviceClass("temperature");
+  zone1FlowTemperature.setStateClass("measurement");
+
+  zone1ReturnTemperature.setIcon("mdi:thermometer");
+  zone1ReturnTemperature.setName("Zone 1 return temperature");
+  zone1ReturnTemperature.setUnitOfMeasurement("°C");
+  zone1ReturnTemperature.setDeviceClass("temperature");
+  zone1ReturnTemperature.setStateClass("measurement");
+
+  zone2FlowTemperature.setIcon("mdi:thermometer");
+  zone2FlowTemperature.setName("Zone 2 flow temperature");
+  zone2FlowTemperature.setUnitOfMeasurement("°C");
+  zone2FlowTemperature.setDeviceClass("temperature");
+  zone2FlowTemperature.setStateClass("measurement");
+
+  zone2ReturnTemperature.setIcon("mdi:thermometer");
+  zone2ReturnTemperature.setName("Zone 2 return temperature");
+  zone2ReturnTemperature.setUnitOfMeasurement("°C");
+  zone2ReturnTemperature.setDeviceClass("temperature");
+  zone2ReturnTemperature.setStateClass("measurement");
+
+  mixingTankTemperature.setIcon("mdi:thermometer");
+  mixingTankTemperature.setName("Mixing tank temperature");
+  mixingTankTemperature.setUnitOfMeasurement("°C");
+  mixingTankTemperature.setDeviceClass("temperature");
+  mixingTankTemperature.setStateClass("measurement");
+
+  condensingTemperature.setIcon("mdi:thermometer");
+  condensingTemperature.setName("Condensing temperature");
+  condensingTemperature.setUnitOfMeasurement("°C");
+  condensingTemperature.setDeviceClass("temperature");
+  condensingTemperature.setStateClass("measurement");
+
+  thermistorUnknownTemperature.setIcon("mdi:thermometer");
+  thermistorUnknownTemperature.setName("Thermistor unknown temperature");
+  thermistorUnknownTemperature.setUnitOfMeasurement("°C");
+  thermistorUnknownTemperature.setDeviceClass("temperature");
+  thermistorUnknownTemperature.setStateClass("measurement");
+
+  outdoorDischargeTemperature.setIcon("mdi:thermometer");
+  outdoorDischargeTemperature.setName("Outdoor discharge temperature");
+  outdoorDischargeTemperature.setUnitOfMeasurement("°C");
+  outdoorDischargeTemperature.setDeviceClass("temperature");
+  outdoorDischargeTemperature.setStateClass("measurement");
+
+  outdoorLiquidPipeTemperature.setIcon("mdi:thermometer");
+  outdoorLiquidPipeTemperature.setName("Outdoor liquid pipe temperature");
+  outdoorLiquidPipeTemperature.setUnitOfMeasurement("°C");
+  outdoorLiquidPipeTemperature.setDeviceClass("temperature");
+  outdoorLiquidPipeTemperature.setStateClass("measurement");
+
+  outdoorTwoPhaseTemperature.setIcon("mdi:thermometer");
+  outdoorTwoPhaseTemperature.setName("Outdoor two-phase temperature");
+  outdoorTwoPhaseTemperature.setUnitOfMeasurement("°C");
+  outdoorTwoPhaseTemperature.setDeviceClass("temperature");
+  outdoorTwoPhaseTemperature.setStateClass("measurement");
+
+  outdoorSuctionTemperature.setIcon("mdi:thermometer");
+  outdoorSuctionTemperature.setName("Outdoor suction temperature");
+  outdoorSuctionTemperature.setUnitOfMeasurement("°C");
+  outdoorSuctionTemperature.setDeviceClass("temperature");
+  outdoorSuctionTemperature.setStateClass("measurement");
+
+  outdoorHeatSinkTemperature.setIcon("mdi:thermometer");
+  outdoorHeatSinkTemperature.setName("Outdoor heat sink temperature");
+  outdoorHeatSinkTemperature.setUnitOfMeasurement("°C");
+  outdoorHeatSinkTemperature.setDeviceClass("temperature");
+  outdoorHeatSinkTemperature.setStateClass("measurement");
+
+  outdoorCompressorSurfaceTemperature.setIcon("mdi:thermometer");
+  outdoorCompressorSurfaceTemperature.setName("Outdoor compressor surface temperature");
+  outdoorCompressorSurfaceTemperature.setUnitOfMeasurement("°C");
+  outdoorCompressorSurfaceTemperature.setDeviceClass("temperature");
+  outdoorCompressorSurfaceTemperature.setStateClass("measurement");
+
+  superheat.setIcon("mdi:thermometer");
+  superheat.setName("Superheat");
+  superheat.setUnitOfMeasurement("°C");
+  superheat.setDeviceClass("temperature");
+  superheat.setStateClass("measurement");
+
+  subcooling.setIcon("mdi:thermometer");
+  subcooling.setName("Subcooling");
+  subcooling.setUnitOfMeasurement("°C");
+  subcooling.setDeviceClass("temperature");
+  subcooling.setStateClass("measurement");
+
+  protocolVersion.setIcon("mdi:chip");
+  protocolVersion.setName("Protocol version");
+
+  modelVersion.setIcon("mdi:chip");
+  modelVersion.setName("Model version");
+
+  supplyCapacity.setIcon("mdi:gauge");
+  supplyCapacity.setName("Supply capacity");
+
+  ftcVersion.setIcon("mdi:chip");
+  ftcVersion.setName("FTC version");
+
+  refrigerantTemperature.setIcon("mdi:thermometer");
+  refrigerantTemperature.setName("Refrigerant temperature");
+  refrigerantTemperature.setUnitOfMeasurement("°C");
+  refrigerantTemperature.setDeviceClass("temperature");
+  refrigerantTemperature.setStateClass("measurement");
+
+  unknownTemperature.setIcon("mdi:thermometer");
+  unknownTemperature.setName("Unknown temperature");
+  unknownTemperature.setUnitOfMeasurement("°C");
+  unknownTemperature.setDeviceClass("temperature");
+  unknownTemperature.setStateClass("measurement");
+
   outputPower.setIcon("mdi:power-plug");
   outputPower.setName("Output power");
   outputPower.setUnitOfMeasurement("W");
@@ -481,6 +901,30 @@ void setupSensors()
 
   systemOperationMode.setIcon("mdi:home");
   systemOperationMode.setName("System operation mode");
+
+  systemDateTime.setIcon("mdi:clock-outline");
+  systemDateTime.setName("System time");
+
+  heatSource.setIcon("mdi:fire");
+  heatSource.setName("Heat source");
+
+  heatSourcePhase.setIcon("mdi:thermometer");
+  heatSourcePhase.setName("Heat source phase");
+
+  errorCode.setIcon("mdi:alert");
+  errorCode.setName("Fault code");
+
+  faultCodeNumber.setIcon("mdi:alert");
+  faultCodeNumber.setName("Fault code number");
+
+  refrigerantFaultCode.setIcon("mdi:alert");
+  refrigerantFaultCode.setName("Refrigerant fault code");
+
+  multiZoneRunning.setIcon("mdi:home-group");
+  multiZoneRunning.setName("Multi-zone running");
+
+  faultStatus.setIcon("mdi:alert");
+  faultStatus.setName("Fault status");
 
   systemPowerMode.setOptions("Standby;On");
   systemPowerMode.onCommand(onSelectPowerCommand);
@@ -531,6 +975,12 @@ void setupSensors()
   consumedHeatingEnergy.setDeviceClass("energy");
   consumedHeatingEnergy.setStateClass("total_increasing");
 
+  consumedCoolingEnergy.setIcon("mdi:power-plug");
+  consumedCoolingEnergy.setName("Consumed cooling energy");
+  consumedCoolingEnergy.setUnitOfMeasurement("kWh");
+  consumedCoolingEnergy.setDeviceClass("energy");
+  consumedCoolingEnergy.setStateClass("total_increasing");
+
   consumedHotWaterEnergy.setIcon("mdi:power-plug");
   consumedHotWaterEnergy.setName("Consumed hot water energy");
   consumedHotWaterEnergy.setUnitOfMeasurement("kWh");
@@ -543,11 +993,29 @@ void setupSensors()
   deliveredHeatingEnergy.setDeviceClass("energy");
   deliveredHeatingEnergy.setStateClass("total_increasing");
 
+  deliveredCoolingEnergy.setIcon("mdi:power-plug");
+  deliveredCoolingEnergy.setName("Delivered cooling energy");
+  deliveredCoolingEnergy.setUnitOfMeasurement("kWh");
+  deliveredCoolingEnergy.setDeviceClass("energy");
+  deliveredCoolingEnergy.setStateClass("total_increasing");
+
   deliveredHotWaterEnergy.setIcon("mdi:power-plug");
   deliveredHotWaterEnergy.setName("Delivered hot water energy");
   deliveredHotWaterEnergy.setUnitOfMeasurement("kWh");
   deliveredHotWaterEnergy.setDeviceClass("energy");
   deliveredHotWaterEnergy.setStateClass("total_increasing");
+
+  hotWaterTemperature2.setIcon("mdi:thermometer");
+  hotWaterTemperature2.setName("Hot water temperature 2");
+  hotWaterTemperature2.setUnitOfMeasurement("°C");
+  hotWaterTemperature2.setDeviceClass("temperature");
+  hotWaterTemperature2.setStateClass("measurement");
+
+  consumedEnergyDateTime.setIcon("mdi:clock-outline");
+  consumedEnergyDateTime.setName("Consumed energy timestamp");
+
+  deliveredEnergyDateTime.setIcon("mdi:clock-outline");
+  deliveredEnergyDateTime.setName("Delivered energy timestamp");
 
   compressorFrequency.setIcon("mdi:flash");
   compressorFrequency.setName("Compressor frequency");
@@ -570,11 +1038,53 @@ void setupSensors()
   flowTempMin.setDeviceClass("temperature");
   flowTempMin.setStateClass("measurement");
 
-  unknownMSG5.setIcon("mdi:alert");
-  unknownMSG5.setName("Unknown MSG5");
+  mixingValveStatus.setIcon("mdi:valve");
+  mixingValveStatus.setName("Mixing valve status");
 
   defrost.setIcon("mdi:snowflake-melt");
   defrost.setName("Defrost");
+
+  holidayModeActive.setIcon("mdi:beach");
+  holidayModeActive.setName("Holiday mode active");
+
+  forcedDHWActive.setIcon("mdi:water-boiler");
+  forcedDHWActive.setName("Forced DHW active");
+
+  serverControlModeActive.setIcon("mdi:server");
+  serverControlModeActive.setName("Server control mode active");
+
+  thermostat1Active.setIcon("mdi:thermostat");
+  thermostat1Active.setName("Thermostat 1 active");
+
+  thermostat2Active.setIcon("mdi:thermostat");
+  thermostat2Active.setName("Thermostat 2 active");
+
+  outdoorThermostatActive.setIcon("mdi:thermostat");
+  outdoorThermostatActive.setName("Outdoor thermostat active");
+
+  boosterHeater1Active.setIcon("mdi:fire");
+  boosterHeater1Active.setName("Booster heater 1 active");
+
+  boosterHeater2Active.setIcon("mdi:fire");
+  boosterHeater2Active.setName("Booster heater 2 active");
+
+  immersionHeaterActive.setIcon("mdi:water-boiler");
+  immersionHeaterActive.setName("Immersion heater active");
+
+  pump1Active.setIcon("mdi:water-pump");
+  pump1Active.setName("Pump 1 active");
+
+  pump2Active.setIcon("mdi:water-pump");
+  pump2Active.setName("Pump 2 active");
+
+  pump3Active.setIcon("mdi:water-pump");
+  pump3Active.setName("Pump 3 active");
+
+  valve1Active.setIcon("mdi:valve");
+  valve1Active.setName("Valve 1 active");
+
+  valve2Active.setIcon("mdi:valve");
+  valve2Active.setName("Valve 2 active");
 
   DHWBoost.setIcon("mdi:fire");
   DHWBoost.setName("Hot Water Boost");

@@ -124,16 +124,29 @@ typedef struct _EcodanStatus
 
   //From Message 0x02
   uint8_t Defrost;
+
+    //From Message 0x03
+    uint8_t RefrigerantFaultCode;
+    uint16_t FaultCodeNumber;
+    char FaultCodeLetter1;
+    char FaultCodeLetter2;
+    uint8_t MultiZoneRunning;
+    uint8_t FaultStatus;
   
   // From Message 0x04
   uint8_t CompressorFrequency;
   
   // From Message 0x05
   uint8_t HotWaterBoostActive;
-  uint8_t UnknownMSG5;
+    uint8_t DhwTempDropMode;
+    uint8_t HeatSource;
+    uint8_t HeatSourcePhase;
   
   // From Message 0x07
-  uint8_t OutputPower;  
+    uint8_t OutputPower;
+    uint8_t InputPowerBand;
+    uint8_t HeaterPower;
+    float TotalInputEnergy;
   
   //From Message 0x09
   float Zone1TemperatureSetpoint; 
@@ -148,26 +161,67 @@ typedef struct _EcodanStatus
   //From Message 0x0b
   float Zone1Temperature;
   float Zone2Temperature;
+    float RefrigerantTemperature;
+    float UnknownTemperature;
   float OutsideTemperature;
   
   //From Message 0x0c
   float HeaterOutputFlowTemperature;
   float HeaterReturnFlowTemperature;
   float HotWaterTemperature;
+    float HotWaterTemperature2;
   
   //From Message 0x0d
-  float ExternalBoilerFlowTemperature;
-  float ExternalBoilerReturnTemperature;
+  float Zone1FlowTemperature;
+  float Zone1ReturnTemperature;
+  float Zone2FlowTemperature;
+  float Zone2ReturnTemperature;
   // Plus Several Outher unused
   
   //From Message 0x0e
-  // Several Unused Temperatures
+  float ExternalBoilerFlowTemperature;
+  float ExternalBoilerReturnTemperature;
+
+  //From Message 0x0f
+  float MixingTankTemperature;
+  float CondensingTemperature;
+  float ThermistorUnknownTemperature;
+  float OutdoorDischargeTemperature;
+  float OutdoorLiquidPipeTemperature;
+  float OutdoorTwoPhaseTemperature;
+  float OutdoorSuctionTemperature;
+  float OutdoorHeatSinkTemperature;
+  float OutdoorCompressorSurfaceTemperature;
+  float Superheat;
+  float Subcooling;
+
+  //From Message 0xc9
+  uint8_t ProtocolVersion;
+  uint8_t ModelVersion;
+  uint8_t SupplyCapacity;
+  uint8_t FtcVersion;
+
+    //From Message 0x10
+    uint8_t Thermostat1Active;
+    uint8_t Thermostat2Active;
+    uint8_t OutdoorThermostatActive;
   
   //From Message 0x14
   uint32_t RunHours;
   
   //From Message 0x14
   uint8_t PrimaryFlowRate;
+    uint8_t BoosterHeater1Active;
+    uint8_t BoosterHeater2Active;
+    uint8_t ImmersionHeaterActive;
+
+    //From Message 0x15
+    uint8_t Pump1Active;
+    uint8_t Pump2Active;
+    uint8_t Pump3Active;
+    uint8_t Valve1Active;
+    uint8_t Valve2Active;
+    uint8_t MixingValveStatus;
   
   //From Message 0x26
   uint8_t SystemPowerMode;
@@ -180,6 +234,13 @@ typedef struct _EcodanStatus
   //From Message 0x28
   uint8_t HotWaterTimerActive;
   uint8_t HolidayModeActive;
+    uint8_t ForcedDHWActive;
+    uint8_t ProhibitDHW;
+    uint8_t ProhibitHeatingZone1;
+    uint8_t ProhibitCoolingZone1;
+    uint8_t ProhibitHeatingZone2;
+    uint8_t ProhibitCoolingZone2;
+    uint8_t ServerControlModeActive;
   
   //From Message 0x29
   //float Zone1TemperatureSetpoint;  Already Defined Above
@@ -242,6 +303,7 @@ private:
 
     void Process0x01(uint8_t *Payload, EcodanStatus *Status);
     void Process0x02(uint8_t *Payload, EcodanStatus *Status);
+    void Process0x03(uint8_t *Payload, EcodanStatus *Status);
     void Process0x04(uint8_t *Payload, EcodanStatus *Status);
     void Process0x05(uint8_t *Payload, EcodanStatus *Status);
     void Process0x07(uint8_t *Payload, EcodanStatus *Status);
@@ -250,12 +312,16 @@ private:
     void Process0x0C(uint8_t *Payload, EcodanStatus *Status);
     void Process0x0D(uint8_t *Payload, EcodanStatus *Status);
     void Process0x0E(uint8_t *Payload, EcodanStatus *Status);
+    void Process0x0F(uint8_t *Payload, EcodanStatus *Status);
+    void Process0x10(uint8_t *Payload, EcodanStatus *Status);
     void Process0x13(uint8_t *Payload, EcodanStatus *Status);
     void Process0x14(uint8_t *Payload, EcodanStatus *Status);
+    void Process0x15(uint8_t *Payload, EcodanStatus *Status);
     void Process0x26(uint8_t *Payload, EcodanStatus *Status);
     void Process0x28(uint8_t *Payload, EcodanStatus *Status);
     void Process0x29(uint8_t *Payload, EcodanStatus *Status);
     void Process0xA1(uint8_t *Payload, EcodanStatus *Status);
     void Process0xA2(uint8_t *Payload, EcodanStatus *Status);
+    void Process0xC9(uint8_t *Payload, EcodanStatus *Status);
 };
 #endif
