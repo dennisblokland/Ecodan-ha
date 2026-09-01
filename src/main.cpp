@@ -42,7 +42,10 @@ WiFiClient NetworkClient;
 ESPTelnet TelnetServer;
 String HostName;
 HADevice device;
-HAMqtt mqtt(NetworkClient, device, 100);
+// 3rd arg is a hard cap on registered entities (ArduinoHA silently drops anything past it,
+// no error). Real count is 102 as of this writing; keep this comfortably above actual count
+// when adding new sensors/entities, or they'll silently stop appearing in HA discovery.
+HAMqtt mqtt(NetworkClient, device, 130);
 
 void HeatPumpQueryStateEngine(void);
 void setupTelnet(void);
@@ -1305,7 +1308,7 @@ void setup()
   OTASetup(HostName.c_str());
 
   device.setName("ESP32-EcodanBridge");
-  device.setSoftwareVersion("1.0.0");
+  device.setSoftwareVersion("1.1.0");
 
   setupSensors();
 
