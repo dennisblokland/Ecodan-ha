@@ -104,6 +104,17 @@ const char COMPRESSORString[4][8] = {"Normal", "Standby", "Defrost", "Wait"};
 #define ZONE2 0x01
 #define BOTH  0x02
 
+// Command 0x34 (Controller Setting) write flags. Byte[1] flag bit selects which
+// byte[3..10] field is applied. Cross-checked against gekkekoe/esphome-ecodan-hp.
+#define CONTROLLER_FLAG_FORCED_DHW          0x01
+#define CONTROLLER_FLAG_HOLIDAY_MODE        0x02
+#define CONTROLLER_FLAG_PROHIBIT_DHW        0x04
+#define CONTROLLER_FLAG_PROHIBIT_Z1_HEATING 0x08
+#define CONTROLLER_FLAG_PROHIBIT_Z1_COOLING 0x10
+#define CONTROLLER_FLAG_PROHIBIT_Z2_HEATING 0x20
+#define CONTROLLER_FLAG_PROHIBIT_Z2_COOLING 0x40
+#define CONTROLLER_FLAG_SERVER_CONTROL      0x80
+
 
 
 
@@ -205,42 +216,58 @@ typedef struct _EcodanStatus
     uint8_t Thermostat1Active;
     uint8_t Thermostat2Active;
     uint8_t OutdoorThermostatActive;
-  
-  //From Message 0x14
+
+  //From Message 0x11
+  uint8_t DipSwitch1;
+  uint8_t DipSwitch2;
+  uint8_t DipSwitch3;
+  uint8_t DipSwitch4;
+  uint8_t DipSwitch5;
+  uint8_t DipSwitch6;
+  uint8_t DipSwitch7;
+
+  //From Message 0x13
   uint32_t RunHours;
-  
+  uint8_t CompressorOn;
+
   //From Message 0x14
   uint8_t PrimaryFlowRate;
-    uint8_t BoosterHeater1Active;
-    uint8_t BoosterHeater2Active;
-    uint8_t ImmersionHeaterActive;
+  uint8_t BoosterHeater1Active;
+  uint8_t BoosterHeater2Active;
+  uint8_t ImmersionHeaterActive;
 
-    //From Message 0x15
-    uint8_t Pump1Active;
-    uint8_t Pump2Active;
-    uint8_t Pump3Active;
-    uint8_t Valve1Active;
-    uint8_t Valve2Active;
-    uint8_t MixingValveStatus;
-  
+  //From Message 0x15
+  uint8_t Pump1Active;
+  uint8_t Pump2Active;
+  uint8_t Pump3Active;
+  uint8_t Valve1Active;
+  uint8_t Valve2Active;
+  uint8_t MixingValveStatus;
+
+  //From Message 0x16
+  uint8_t Pump4Active;
+  uint8_t MixingValveStepZ1;
+
   //From Message 0x26
   uint8_t SystemPowerMode;
   uint8_t SystemOperationMode;
   uint8_t HotWaterControlMode;
   uint8_t HeatingControlMode;
+  uint8_t HeatingControlModeZone2;
+  uint8_t MRCFlag;
   float HotWaterSetpoint;
   float HeaterFlowSetpoint;
   
   //From Message 0x28
   uint8_t HotWaterTimerActive;
   uint8_t HolidayModeActive;
-    uint8_t ForcedDHWActive;
-    uint8_t ProhibitDHW;
-    uint8_t ProhibitHeatingZone1;
-    uint8_t ProhibitCoolingZone1;
-    uint8_t ProhibitHeatingZone2;
-    uint8_t ProhibitCoolingZone2;
-    uint8_t ServerControlModeActive;
+  uint8_t ForcedDHWActive;
+  uint8_t ProhibitDHW;
+  uint8_t ProhibitHeatingZone1;
+  uint8_t ProhibitCoolingZone1;
+  uint8_t ProhibitHeatingZone2;
+  uint8_t ProhibitCoolingZone2;
+  uint8_t ServerControlModeActive;
   
   //From Message 0x29
   //float Zone1TemperatureSetpoint;  Already Defined Above
@@ -277,6 +304,7 @@ public:
                             uint8_t HeatingControlModeZ1, uint8_t HeatingControlModeZ2, 
                             uint8_t HotWaterMode, uint8_t Power);
     void EncodeDHW(uint8_t OnOff);
+    void EncodeControllerSetting(uint8_t Flag, uint8_t OnOff);
 
     EcodanStatus Status;
 protected:
@@ -296,9 +324,11 @@ private:
 
     
     uint16_t ExtractUInt16(uint8_t *Buffer, uint8_t Index);
+    int16_t  ExtractInt16(uint8_t *Buffer, uint8_t Index);
     float    ExtractEnergy(uint8_t *Buffer, uint8_t index);
-    
-    
+    float    ExtractNtcTemperature(uint8_t Value);
+
+
     uint8_t  CheckSum(uint8_t *Buffer, uint8_t len);
 
     void Process0x01(uint8_t *Payload, EcodanStatus *Status);
@@ -314,9 +344,11 @@ private:
     void Process0x0E(uint8_t *Payload, EcodanStatus *Status);
     void Process0x0F(uint8_t *Payload, EcodanStatus *Status);
     void Process0x10(uint8_t *Payload, EcodanStatus *Status);
+    void Process0x11(uint8_t *Payload, EcodanStatus *Status);
     void Process0x13(uint8_t *Payload, EcodanStatus *Status);
     void Process0x14(uint8_t *Payload, EcodanStatus *Status);
     void Process0x15(uint8_t *Payload, EcodanStatus *Status);
+    void Process0x16(uint8_t *Payload, EcodanStatus *Status);
     void Process0x26(uint8_t *Payload, EcodanStatus *Status);
     void Process0x28(uint8_t *Payload, EcodanStatus *Status);
     void Process0x29(uint8_t *Payload, EcodanStatus *Status);

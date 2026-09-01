@@ -78,6 +78,9 @@ uint8_t ECODANDECODER::Process(uint8_t c)
         case 0x10 :
           Process0x10(RxMessage.Payload, &Status);
           break;
+        case 0x11 :
+          Process0x11(RxMessage.Payload, &Status);
+          break;
         case 0x13 :
           Process0x13(RxMessage.Payload, &Status);
           break;
@@ -86,6 +89,9 @@ uint8_t ECODANDECODER::Process(uint8_t c)
           break;
         case 0x15 :
           Process0x15(RxMessage.Payload, &Status);
+          break;
+        case 0x16 :
+          Process0x16(RxMessage.Payload, &Status);
           break;
         case 0x26 :
           Process0x26(RxMessage.Payload, &Status);
@@ -278,8 +284,8 @@ void ECODANDECODER::Process0x07(uint8_t * Buffer, EcodanStatus *Status)
 {
   Status->OutputPower = Buffer[6];
   Status->InputPowerBand = Buffer[4];
-  Status->HeaterPower = Buffer[6];
-  Status->TotalInputEnergy = ((float)ExtractUInt16(Buffer, 10)) / 10;
+  Status->HeaterPower = Buffer[8];
+  Status->TotalInputEnergy = ((float)ExtractUInt16(Buffer, 11)) / 10;
 }
 
 void ECODANDECODER::Process0x09(uint8_t * Buffer, EcodanStatus *Status)
@@ -314,9 +320,10 @@ void ECODANDECODER::Process0x0B(uint8_t * Buffer, EcodanStatus *Status)
   float fZone1, fZone2, fOutside;
   float fRefrigerant, fUnknown;
 
-  fZone1 = ((float)ExtractUInt16(Buffer, 1) / 100);
-  fZone2 = ((float)ExtractUInt16(Buffer, 3) / 100);
-  fRefrigerant = ((float)ExtractUInt16(Buffer, 8) / 100);
+  // 0xF0 is a sentinel meaning "zone not reported" (e.g. no zone2 on single-zone systems).
+  fZone1 = (Buffer[1] != 0xF0) ? ((float)ExtractUInt16(Buffer, 1) / 100) : 0.0f;
+  fZone2 = (Buffer[3] != 0xF0) ? ((float)ExtractUInt16(Buffer, 3) / 100) : 0.0f;
+  fRefrigerant = ((float)ExtractInt16(Buffer, 8) / 100);
   fUnknown = ((float)Buffer[10] / 2) - 40;
   fOutside = ((float)Buffer[11] / 2) - 40;
 
@@ -377,16 +384,42 @@ void ECODANDECODER::Process0x0E(uint8_t * Buffer, EcodanStatus *Status)
 void ECODANDECODER::Process0x0F(uint8_t * Buffer, EcodanStatus *Status)
 {
   Status->MixingTankTemperature = ((float)ExtractUInt16(Buffer, 1) / 100);
-  Status->CondensingTemperature = ((float)ExtractUInt16(Buffer, 4) / 100);
   Status->ThermistorUnknownTemperature = ((float)Buffer[6] / 2) - 40;
-  Status->OutdoorDischargeTemperature = Buffer[7];
-  Status->OutdoorLiquidPipeTemperature = ((float)Buffer[8] / 2) - 39;
-  Status->OutdoorTwoPhaseTemperature = ((float)Buffer[9] / 2) - 39;
-  Status->OutdoorSuctionTemperature = ((float)Buffer[10] / 2) - 39;
-  Status->OutdoorHeatSinkTemperature = (float)Buffer[11] - 40;
-  Status->OutdoorCompressorSurfaceTemperature = (float)Buffer[12] - 40;
-  Status->Superheat = Buffer[13];
-  Status->Subcooling = ((float)Buffer[14] / 2) - 39;
+
+  // Firmware quirk: condensing temp bytes get stuck at 0x0FD9 (40.57C) on some units.
+  // When that happens the real reading comes from the byte6 NTC thermistor curve instead.
+  if (Buffer[4] == 0x0F && Buffer[5] == 0xD9)
+  {
+    Status->CondensingTemperature = ExtractNtcTemperature(Buffer[6]);
+  }
+  else
+  {
+    Status->CondensingTemperature = ((float)ExtractInt16(Buffer, 4) / 100);
+  }
+  // Bytes 7-14 are only populated on units that report extended outdoor unit
+  // thermistors (FTC6+). On other units they're always zero; decoding them
+  // anyway would publish fake -39/-40C constants instead of "not supported".
+  uint8_t hasExtendedThermistors = 0;
+  for (uint8_t i = 7; i <= 14; i++)
+  {
+    if (Buffer[i] != 0)
+    {
+      hasExtendedThermistors = 1;
+      break;
+    }
+  }
+
+  if (hasExtendedThermistors)
+  {
+    Status->OutdoorDischargeTemperature = Buffer[7];
+    Status->OutdoorLiquidPipeTemperature = ((float)Buffer[8] / 2) - 39;
+    Status->OutdoorTwoPhaseTemperature = ((float)Buffer[9] / 2) - 39;
+    Status->OutdoorSuctionTemperature = ((float)Buffer[10] / 2) - 39;
+    Status->OutdoorHeatSinkTemperature = (float)Buffer[11] - 40;
+    Status->OutdoorCompressorSurfaceTemperature = (float)Buffer[12] - 40;
+    Status->Superheat = Buffer[13];
+    Status->Subcooling = ((float)Buffer[14] / 2) - 39;
+  }
 }
 
 void ECODANDECODER::Process0x10(uint8_t * Buffer, EcodanStatus *Status)
@@ -394,6 +427,17 @@ void ECODANDECODER::Process0x10(uint8_t * Buffer, EcodanStatus *Status)
   Status->Thermostat1Active = Buffer[1];
   Status->Thermostat2Active = Buffer[2];
   Status->OutdoorThermostatActive = Buffer[3];
+}
+
+void ECODANDECODER::Process0x11(uint8_t * Buffer, EcodanStatus *Status)
+{
+  Status->DipSwitch1 = Buffer[1];
+  Status->DipSwitch2 = Buffer[3];
+  Status->DipSwitch3 = Buffer[5];
+  Status->DipSwitch4 = Buffer[7];
+  Status->DipSwitch5 = Buffer[9];
+  Status->DipSwitch6 = Buffer[11];
+  Status->DipSwitch7 = Buffer[13];
 }
 
 void ECODANDECODER::Process0x13(uint8_t * Buffer, EcodanStatus *Status)
@@ -407,6 +451,7 @@ void ECODANDECODER::Process0x13(uint8_t * Buffer, EcodanStatus *Status)
   RunHours += Buffer[3];
 
   Status->RunHours = RunHours;
+  Status->CompressorOn = Buffer[1] != 0;
 }
 
 
@@ -432,19 +477,24 @@ void ECODANDECODER::Process0x15(uint8_t * Buffer, EcodanStatus *Status)
   Status->MixingValveStatus = Buffer[10];
 }
 
+void ECODANDECODER::Process0x16(uint8_t * Buffer, EcodanStatus *Status)
+{
+  Status->Pump4Active = Buffer[1];
+  Status->MixingValveStepZ1 = Buffer[8];
+}
+
 void ECODANDECODER::Process0x26(uint8_t * Buffer, EcodanStatus *Status)
 {
   float fHWSetpoint;
   float fExternalSetpoint, fExternalFlowTemp;
   uint8_t SystemPowerMode, SystemOperationMode, HotWaterPowerMode;
-  uint8_t HeatingControlMode, HotWaterControlMode;
-  uint8_t Buffer7Flag;
+  uint8_t HeatingControlMode, HeatingControlModeZone2, HotWaterControlMode;
 
   SystemPowerMode = Buffer[3];
   SystemOperationMode = Buffer[4];
   HotWaterControlMode = Buffer[5];
   HeatingControlMode = Buffer[6];
-  Buffer7Flag = Buffer[7];
+  HeatingControlModeZone2 = Buffer[7];
 
   fHWSetpoint = ((float)ExtractUInt16(Buffer, 8) / 100);
   fExternalSetpoint = ((float)ExtractUInt16(Buffer, 10) / 100);
@@ -454,6 +504,8 @@ void ECODANDECODER::Process0x26(uint8_t * Buffer, EcodanStatus *Status)
   Status->SystemOperationMode = SystemOperationMode;
   Status->HotWaterControlMode = HotWaterControlMode;
   Status->HeatingControlMode = HeatingControlMode;
+  Status->HeatingControlModeZone2 = HeatingControlModeZone2;
+  Status->MRCFlag = Buffer[14];
   Status->HotWaterSetpoint = fHWSetpoint;
   Status->HeaterFlowSetpoint = fExternalSetpoint;
 }
@@ -461,13 +513,13 @@ void ECODANDECODER::Process0x26(uint8_t * Buffer, EcodanStatus *Status)
 
 void ECODANDECODER::Process0x28(uint8_t * Buffer, EcodanStatus *Status)
 {
-  uint8_t HotWaterTimer;
   uint8_t HolidayMode;
 
-  HotWaterTimer = Buffer[5];
   HolidayMode = Buffer[4];
 
-  Status->HotWaterTimerActive = HotWaterTimer;
+  // HotWaterTimerActive previously aliased Buffer[5], which is actually ProhibitDHW
+  // (confirmed byte-for-byte against gekkekoe/esphome-ecodan-hp's MODE_FLAGS_B decode).
+  // No known byte carries a real hot water timer flag in this message; left unset.
   Status->HolidayModeActive = HolidayMode;
   Status->ForcedDHWActive = Buffer[3];
   Status->ProhibitDHW = Buffer[5];
@@ -480,11 +532,9 @@ void ECODANDECODER::Process0x28(uint8_t * Buffer, EcodanStatus *Status)
 
 void ECODANDECODER::Process0x29(uint8_t * Buffer, EcodanStatus *Status)
 {
-  float fZone1, fZone2;
-  float fFlowSetpoint, fFlowTemp, fWaterSetpoint;
-
-  fZone1 = ((float)ExtractUInt16(Buffer, 4) / 100);
-  fZone2 = ((float)ExtractUInt16(Buffer, 6) / 100);
+  // Duplicate zone temperature broadcast (same fields as message 0x0B).
+  Status->Zone1Temperature = ((float)ExtractUInt16(Buffer, 4) / 100);
+  Status->Zone2Temperature = ((float)ExtractUInt16(Buffer, 6) / 100);
 }
 
 void ECODANDECODER::Process0xA1(uint8_t * Buffer, EcodanStatus *Status)
@@ -557,6 +607,43 @@ uint16_t ECODANDECODER::ExtractUInt16(uint8_t *Buffer, uint8_t Index)
   Value = (Buffer[Index] << 8) + Buffer[Index + 1];
 
   return Value;
+}
+
+int16_t ECODANDECODER::ExtractInt16(uint8_t *Buffer, uint8_t Index)
+{
+  return (int16_t)((Buffer[Index] << 8) + Buffer[Index + 1]);
+}
+
+// 10k NTC thermistor (type B=3950K) interpolation curve, used as a fallback when the
+// primary condensing-temperature field is stuck at its known sentinel value.
+// Table cross-checked against gekkekoe/esphome-ecodan-hp's get_float8_v3().
+float ECODANDECODER::ExtractNtcTemperature(uint8_t Value)
+{
+  struct NtcSegment { uint8_t MaxByte; float Scale; float Offset; };
+  static const NtcSegment NtcTable[] = {
+    { 0x40, 0.79f,    -42.68f   },
+    { 0x44, 0.7525f,  -40.28f   },
+    { 0x4B, 0.69f,    -36.03f   },
+    { 0x56, 0.60909f, -29.9618f },
+    { 0x5D, 0.54714f, -24.621f  },
+    { 0x6A, 0.49308f, -19.606f  },
+    { 0x73, 0.44556f, -14.545f  },
+    { 0x80, 0.40923f, -10.395f  },
+    { 0x8B, 0.37364f, -5.748f   },
+    { 0x9B, 0.34313f, -1.503f   },
+    { 0xB4, 0.306f,    4.187f   },
+    { 0xB7, 0.28667f,  7.67f    },
+  };
+  static const uint8_t NtcTableSize = sizeof(NtcTable) / sizeof(NtcTable[0]);
+
+  for (uint8_t i = 0; i < NtcTableSize; i++)
+  {
+    if (Value <= NtcTable[i].MaxByte)
+    {
+      return ((float)Value * NtcTable[i].Scale) + NtcTable[i].Offset;
+    }
+  }
+  return ((float)Value * NtcTable[NtcTableSize - 1].Scale) + NtcTable[NtcTableSize - 1].Offset;
 }
 
 
@@ -702,4 +789,43 @@ void ECODANDECODER::EncodeDHW(uint8_t OnOff)
   //TxMessage.Payload[4] = Unknown;
   //TxMessage.Payload[5] = HolidayMode?;
 
+}
+
+// Command 0x34 (Controller Setting), generalized beyond forced-DHW. Byte layout
+// cross-checked against gekkekoe/esphome-ecodan-hp's set_controller_mode().
+void ECODANDECODER::EncodeControllerSetting(uint8_t Flag, uint8_t OnOff)
+{
+  TxMessage.Payload[0] = TX_MESSAGE_SETTING_DHW;
+  TxMessage.Payload[1] = Flag;
+  TxMessage.Payload[2] = 0;
+
+  if (Flag & CONTROLLER_FLAG_FORCED_DHW)
+    TxMessage.Payload[3] = OnOff;
+
+  if (Flag & CONTROLLER_FLAG_HOLIDAY_MODE)
+    TxMessage.Payload[4] = OnOff;
+
+  if (Flag & CONTROLLER_FLAG_PROHIBIT_DHW)
+    TxMessage.Payload[5] = OnOff;
+
+  if (Flag & CONTROLLER_FLAG_PROHIBIT_Z1_HEATING)
+    TxMessage.Payload[6] = OnOff;
+
+  if (Flag & CONTROLLER_FLAG_PROHIBIT_Z1_COOLING)
+    TxMessage.Payload[7] = OnOff;
+
+  if (Flag & CONTROLLER_FLAG_PROHIBIT_Z2_HEATING)
+    TxMessage.Payload[8] = OnOff;
+
+  if (Flag & CONTROLLER_FLAG_PROHIBIT_Z2_COOLING)
+    TxMessage.Payload[9] = OnOff;
+
+  if (Flag & CONTROLLER_FLAG_SERVER_CONTROL)
+  {
+    // Entering server control mode requires explicitly prohibiting all zones/DHW.
+    TxMessage.Payload[1] = Flag | CONTROLLER_FLAG_PROHIBIT_DHW | CONTROLLER_FLAG_PROHIBIT_Z1_HEATING |
+                            CONTROLLER_FLAG_PROHIBIT_Z1_COOLING | CONTROLLER_FLAG_PROHIBIT_Z2_HEATING |
+                            CONTROLLER_FLAG_PROHIBIT_Z2_COOLING;
+    TxMessage.Payload[10] = OnOff;
+  }
 }

@@ -42,7 +42,7 @@ WiFiClient NetworkClient;
 ESPTelnet TelnetServer;
 String HostName;
 HADevice device;
-HAMqtt mqtt(NetworkClient, device, 32);
+HAMqtt mqtt(NetworkClient, device, 100);
 
 void HeatPumpQueryStateEngine(void);
 void setupTelnet(void);
@@ -109,6 +109,16 @@ HASensorNumber runHours("runHours", HASensorNumber::PrecisionP0);
 HASensorNumber flowTempMax("flowTempMax", HASensorNumber::PrecisionP1);
 HASensorNumber flowTempMin("flowTempMin", HASensorNumber::PrecisionP1);
 HASensorNumber mixingValveStatus("mixingValveStatus", HASensorNumber::PrecisionP0);
+HASensorNumber compressorStarts("compressorStarts", HASensorNumber::PrecisionP0);
+HASensorNumber mrcFlag("mrcFlag", HASensorNumber::PrecisionP0);
+HASensorNumber dipSwitch1("dipSwitch1", HASensorNumber::PrecisionP0);
+HASensorNumber dipSwitch2("dipSwitch2", HASensorNumber::PrecisionP0);
+HASensorNumber dipSwitch3("dipSwitch3", HASensorNumber::PrecisionP0);
+HASensorNumber dipSwitch4("dipSwitch4", HASensorNumber::PrecisionP0);
+HASensorNumber dipSwitch5("dipSwitch5", HASensorNumber::PrecisionP0);
+HASensorNumber dipSwitch6("dipSwitch6", HASensorNumber::PrecisionP0);
+HASensorNumber dipSwitch7("dipSwitch7", HASensorNumber::PrecisionP0);
+HASensorNumber mixingValveStepZ1("mixingValveStepZ1", HASensorNumber::PrecisionP0);
 
 HABinarySensor hotWaterTimerActive("hotWaterTimerActive");
 HABinarySensor defrost("defrost");
@@ -126,6 +136,13 @@ HABinarySensor pump2Active("pump2Active");
 HABinarySensor pump3Active("pump3Active");
 HABinarySensor valve1Active("valve1Active");
 HABinarySensor valve2Active("valve2Active");
+HABinarySensor prohibitDHW("prohibitDHW");
+HABinarySensor prohibitHeatingZone1("prohibitHeatingZone1");
+HABinarySensor prohibitCoolingZone1("prohibitCoolingZone1");
+HABinarySensor prohibitHeatingZone2("prohibitHeatingZone2");
+HABinarySensor prohibitCoolingZone2("prohibitCoolingZone2");
+HABinarySensor compressorOn("compressorOn");
+HABinarySensor pump4Active("pump4Active");
 
 HASensor hotWaterControlMode("hotWaterControlMode");
 HASensor systemOperationMode("systemOperationMode");
@@ -135,6 +152,8 @@ HASensor deliveredEnergyDateTime("deliveredEnergyDateTime");
 HASensor heatSource("heatSource");
 HASensor heatSourcePhase("heatSourcePhase");
 HASensor errorCode("errorCode");
+HASensor compressorState("compressorState");
+HASensor heatingControlModeZone2("heatingControlModeZone2");
 HASelect heatingControlMode("heatingControlMode");
 HASwitch DHWBoost("DHWBoost");
 HASelect systemPowerMode("systemPowerMode");
@@ -313,10 +332,29 @@ void HeatPumpKeepAlive(void)
   HeatPump.TriggerStatusStateMachine();
 }
 
+namespace
+{
+HAHVAC::Mode zoneModeFromStatus(void)
+{
+  if (HeatPump.Status.SystemPowerMode != SYSTEM_POWER_MODE_ON)
+    return HAHVAC::OffMode;
+
+  if (HeatPump.Status.SystemOperationMode == SYSTEM_OPERATION_MODE_HEATING ||
+      HeatPump.Status.SystemOperationMode == SYSTEM_OPERATION_MODE_HEATING_ECO)
+    return HAHVAC::HeatMode;
+
+  if (HeatPump.Status.SystemOperationMode == SYSTEM_OPERATION_MODE_COOLING)
+    return HAHVAC::CoolMode;
+
+  return HAHVAC::OffMode;
+}
+} // namespace
+
 void Zone1Report(void)
 {
   static float lastCurrent = NAN;
   static float lastTarget = NAN;
+  static HAHVAC::Mode lastMode = HAHVAC::UnknownMode;
 
   if (isnan(lastCurrent) || fabsf(HeatPump.Status.Zone1Temperature - lastCurrent) > 0.01f)
   {
@@ -328,12 +366,19 @@ void Zone1Report(void)
     zone1.setTargetTemperature(HeatPump.Status.Zone1TemperatureSetpoint);
     lastTarget = HeatPump.Status.Zone1TemperatureSetpoint;
   }
+  HAHVAC::Mode mode = zoneModeFromStatus();
+  if (mode != lastMode)
+  {
+    zone1.setMode(mode);
+    lastMode = mode;
+  }
 }
 
 void Zone2Report(void)
 {
   static float lastCurrent = NAN;
   static float lastTarget = NAN;
+  static HAHVAC::Mode lastMode = HAHVAC::UnknownMode;
 
   if (isnan(lastCurrent) || fabsf(HeatPump.Status.Zone2Temperature - lastCurrent) > 0.01f)
   {
@@ -344,6 +389,12 @@ void Zone2Report(void)
   {
     zone2.setTargetTemperature(HeatPump.Status.Zone2TemperatureSetpoint);
     lastTarget = HeatPump.Status.Zone2TemperatureSetpoint;
+  }
+  HAHVAC::Mode mode = zoneModeFromStatus();
+  if (mode != lastMode)
+  {
+    zone2.setMode(mode);
+    lastMode = mode;
   }
 }
 
@@ -356,6 +407,7 @@ void HotWaterReport(void)
   static uint8_t lastControlMode = 0xFF;
   static float lastLegionella = NAN;
   static float lastDrop = NAN;
+  static HAHVAC::Mode lastMode = HAHVAC::UnknownMode;
 
   if (isnan(lastCurrent) || fabsf(HeatPump.Status.HotWaterTemperature - lastCurrent) > 0.01f)
   {
@@ -366,6 +418,20 @@ void HotWaterReport(void)
   {
     hotWater.setTargetTemperature(HeatPump.Status.HotWaterSetpoint);
     lastTarget = HeatPump.Status.HotWaterSetpoint;
+  }
+  {
+    HAHVAC::Mode mode = HAHVAC::OffMode;
+    if (HeatPump.Status.SystemPowerMode == SYSTEM_POWER_MODE_ON &&
+        (HeatPump.Status.SystemOperationMode == SYSTEM_OPERATION_MODE_HOT_WATER ||
+         HeatPump.Status.SystemOperationMode == SYSTEM_OPERATION_MODE_LEGIONELLA))
+    {
+      mode = HAHVAC::HeatMode;
+    }
+    if (mode != lastMode)
+    {
+      hotWater.setMode(mode);
+      lastMode = mode;
+    }
   }
 
   if (HeatPump.Status.HotWaterBoostActive != lastBoost)
@@ -511,8 +577,29 @@ void TestReport(void)
   static uint8_t lastMultiZoneRunning = 0xFF;
   static uint8_t lastFaultStatus = 0xFF;
   static char lastErrorCode[24] = "";
+  static char lastSystemTimestamp[20] = "";
   static char lastConsumedTimestamp[20] = "";
   static char lastDeliveredTimestamp[20] = "";
+  static bool lastProhibitDHW = false;
+  static bool lastProhibitHeatingZone1 = false;
+  static bool lastProhibitCoolingZone1 = false;
+  static bool lastProhibitHeatingZone2 = false;
+  static bool lastProhibitCoolingZone2 = false;
+  static uint8_t lastCompressorState = 0xFF;
+  static uint8_t previousCompressorFrequency = 0;
+  static uint32_t compressorStartCount = 0;
+  static uint8_t lastMrcFlag = 0xFF;
+  static uint8_t lastDipSwitch1 = 0xFF;
+  static uint8_t lastDipSwitch2 = 0xFF;
+  static uint8_t lastDipSwitch3 = 0xFF;
+  static uint8_t lastDipSwitch4 = 0xFF;
+  static uint8_t lastDipSwitch5 = 0xFF;
+  static uint8_t lastDipSwitch6 = 0xFF;
+  static uint8_t lastDipSwitch7 = 0xFF;
+  static uint8_t lastMixingValveStepZ1 = 0xFF;
+  static bool lastCompressorOn = false;
+  static bool lastPump4 = false;
+  static uint8_t lastHeatingControlModeZone2 = 0xFF;
   char timestamp[20];
   char errorText[24];
 
@@ -524,6 +611,12 @@ void TestReport(void)
   updateNumberIfChanged(deliveredHeatingEnergy, HeatPump.Status.DeliveredHeatingEnergy, lastDeliveredHeating);
   updateNumberIfChanged(deliveredCoolingEnergy, HeatPump.Status.DeliveredCoolingEnergy, lastDeliveredCooling);
   updateNumberIfChanged(deliveredHotWaterEnergy, HeatPump.Status.DeliveredHotWaterEnergy, lastDeliveredHotWater);
+  if (previousCompressorFrequency == 0 && HeatPump.Status.CompressorFrequency > 0)
+  {
+    compressorStartCount++;
+    compressorStarts.setValue(compressorStartCount);
+  }
+  previousCompressorFrequency = HeatPump.Status.CompressorFrequency;
   updateUInt8IfChanged(compressorFrequency, HeatPump.Status.CompressorFrequency, lastCompressorFrequency);
   if (HeatPump.Status.RunHours != lastRunHours)
   {
@@ -547,6 +640,34 @@ void TestReport(void)
   updateBinaryIfChanged(pump3Active, HeatPump.Status.Pump3Active, lastPump3);
   updateBinaryIfChanged(valve1Active, HeatPump.Status.Valve1Active, lastValve1);
   updateBinaryIfChanged(valve2Active, HeatPump.Status.Valve2Active, lastValve2);
+  updateBinaryIfChanged(prohibitDHW, HeatPump.Status.ProhibitDHW, lastProhibitDHW);
+  updateBinaryIfChanged(prohibitHeatingZone1, HeatPump.Status.ProhibitHeatingZone1, lastProhibitHeatingZone1);
+  updateBinaryIfChanged(prohibitCoolingZone1, HeatPump.Status.ProhibitCoolingZone1, lastProhibitCoolingZone1);
+  updateBinaryIfChanged(prohibitHeatingZone2, HeatPump.Status.ProhibitHeatingZone2, lastProhibitHeatingZone2);
+  updateBinaryIfChanged(prohibitCoolingZone2, HeatPump.Status.ProhibitCoolingZone2, lastProhibitCoolingZone2);
+  updateBinaryIfChanged(compressorOn, HeatPump.Status.CompressorOn, lastCompressorOn);
+  updateBinaryIfChanged(pump4Active, HeatPump.Status.Pump4Active, lastPump4);
+  updateUInt8IfChanged(mrcFlag, HeatPump.Status.MRCFlag, lastMrcFlag);
+  updateUInt8IfChanged(dipSwitch1, HeatPump.Status.DipSwitch1, lastDipSwitch1);
+  updateUInt8IfChanged(dipSwitch2, HeatPump.Status.DipSwitch2, lastDipSwitch2);
+  updateUInt8IfChanged(dipSwitch3, HeatPump.Status.DipSwitch3, lastDipSwitch3);
+  updateUInt8IfChanged(dipSwitch4, HeatPump.Status.DipSwitch4, lastDipSwitch4);
+  updateUInt8IfChanged(dipSwitch5, HeatPump.Status.DipSwitch5, lastDipSwitch5);
+  updateUInt8IfChanged(dipSwitch6, HeatPump.Status.DipSwitch6, lastDipSwitch6);
+  updateUInt8IfChanged(dipSwitch7, HeatPump.Status.DipSwitch7, lastDipSwitch7);
+  updateUInt8IfChanged(mixingValveStepZ1, HeatPump.Status.MixingValveStepZ1, lastMixingValveStepZ1);
+  if (HeatPump.Status.HeatingControlModeZone2 != lastHeatingControlModeZone2)
+  {
+    uint8_t zone2Mode = HeatPump.Status.HeatingControlModeZone2 < 6 ? HeatPump.Status.HeatingControlModeZone2 : 0;
+    heatingControlModeZone2.setValue(HeatingControlModeString[zone2Mode]);
+    lastHeatingControlModeZone2 = HeatPump.Status.HeatingControlModeZone2;
+  }
+  if (HeatPump.Status.Defrost != lastCompressorState)
+  {
+    uint8_t state = HeatPump.Status.Defrost < 4 ? HeatPump.Status.Defrost : 0;
+    compressorState.setValue(COMPRESSORString[state]);
+    lastCompressorState = HeatPump.Status.Defrost;
+  }
   if (HeatPump.Status.MixingValveStatus != lastMixingValveStatus)
   {
     mixingValveStatus.setValue(HeatPump.Status.MixingValveStatus);
@@ -560,9 +681,7 @@ void TestReport(void)
   updateUInt8IfChanged(refrigerantFaultCode, HeatPump.Status.RefrigerantFaultCode, lastRefrigerantFaultCode);
   updateUInt8IfChanged(multiZoneRunning, HeatPump.Status.MultiZoneRunning, lastMultiZoneRunning);
   updateUInt8IfChanged(faultStatus, HeatPump.Status.FaultStatus, lastFaultStatus);
-  if (HeatPump.Status.FaultCodeNumber == 0 &&
-      safeLetter(HeatPump.Status.FaultCodeLetter1) == '-' &&
-      safeLetter(HeatPump.Status.FaultCodeLetter2) == '-')
+  if (HeatPump.Status.FaultStatus == 0 && HeatPump.Status.RefrigerantFaultCode == 0)
   {
     strncpy(errorText, "OK", sizeof(errorText));
     errorText[sizeof(errorText) - 1] = '\0';
@@ -577,6 +696,10 @@ void TestReport(void)
              safeLetter(HeatPump.Status.FaultCodeLetter2));
   }
   updateTextIfChanged(errorCode, errorText, lastErrorCode, sizeof(lastErrorCode));
+  if (formatTimestamp(HeatPump.Status.DateTimeStamp, timestamp, sizeof(timestamp)))
+  {
+    updateTextIfChanged(systemDateTime, timestamp, lastSystemTimestamp, sizeof(lastSystemTimestamp));
+  }
   if (formatTimestamp(HeatPump.Status.ConsumedDateTimeStamp, timestamp, sizeof(timestamp)))
   {
     updateTextIfChanged(consumedEnergyDateTime, timestamp, lastConsumedTimestamp, sizeof(lastConsumedTimestamp));
@@ -941,21 +1064,21 @@ void setupSensors()
   zone1.setMinTemp(5);
   zone1.setMaxTemp(60);
   zone1.setTempStep(1);
-  zone1.setModes(HAHVAC::UnknownMode);
+  zone1.setModes(HAHVAC::OffMode | HAHVAC::HeatMode | HAHVAC::CoolMode);
 
   zone2.onTargetTemperatureCommand(onZone2TargetTemperatureCommand);
   zone2.setName("Zone 2");
   zone2.setMinTemp(5);
   zone2.setMaxTemp(60);
   zone2.setTempStep(1);
-  zone2.setModes(HAHVAC::UnknownMode);
+  zone2.setModes(HAHVAC::OffMode | HAHVAC::HeatMode | HAHVAC::CoolMode);
 
   hotWater.onTargetTemperatureCommand(onhotWaterSetpointCommand);
   hotWater.setName("Hotwater");
   hotWater.setMinTemp(5);
   hotWater.setMaxTemp(60);
   hotWater.setTempStep(1);
-  hotWater.setModes(HAHVAC::UnknownMode);
+  hotWater.setModes(HAHVAC::OffMode | HAHVAC::HeatMode);
 
   zone1FlowTemperatureSetpoint.setIcon("mdi:thermometer");
   zone1FlowTemperatureSetpoint.setName("Zone 1 flow temperature setpoint");
@@ -1041,8 +1164,67 @@ void setupSensors()
   mixingValveStatus.setIcon("mdi:valve");
   mixingValveStatus.setName("Mixing valve status");
 
+  compressorStarts.setIcon("mdi:counter");
+  compressorStarts.setName("Compressor starts");
+  compressorStarts.setStateClass("total_increasing");
+  compressorStarts.setValue((uint32_t)0);
+
+  compressorState.setIcon("mdi:heat-pump");
+  compressorState.setName("Compressor state");
+
+  compressorOn.setIcon("mdi:heat-pump");
+  compressorOn.setName("Compressor on");
+
+  heatingControlModeZone2.setIcon("mdi:thermostat");
+  heatingControlModeZone2.setName("Heating control mode zone 2");
+
+  mrcFlag.setIcon("mdi:remote");
+  mrcFlag.setName("MRC flag");
+
+  pump4Active.setIcon("mdi:water-pump");
+  pump4Active.setName("Pump 4 active");
+
+  mixingValveStepZ1.setIcon("mdi:valve");
+  mixingValveStepZ1.setName("Mixing valve step zone 1");
+
+  dipSwitch1.setIcon("mdi:dip-switch");
+  dipSwitch1.setName("Dip switch 1");
+
+  dipSwitch2.setIcon("mdi:dip-switch");
+  dipSwitch2.setName("Dip switch 2");
+
+  dipSwitch3.setIcon("mdi:dip-switch");
+  dipSwitch3.setName("Dip switch 3");
+
+  dipSwitch4.setIcon("mdi:dip-switch");
+  dipSwitch4.setName("Dip switch 4");
+
+  dipSwitch5.setIcon("mdi:dip-switch");
+  dipSwitch5.setName("Dip switch 5");
+
+  dipSwitch6.setIcon("mdi:dip-switch");
+  dipSwitch6.setName("Dip switch 6");
+
+  dipSwitch7.setIcon("mdi:dip-switch");
+  dipSwitch7.setName("Dip switch 7");
+
   defrost.setIcon("mdi:snowflake-melt");
   defrost.setName("Defrost");
+
+  prohibitDHW.setIcon("mdi:water-boiler-off");
+  prohibitDHW.setName("Prohibit DHW");
+
+  prohibitHeatingZone1.setIcon("mdi:radiator-off");
+  prohibitHeatingZone1.setName("Prohibit heating zone 1");
+
+  prohibitCoolingZone1.setIcon("mdi:snowflake-off");
+  prohibitCoolingZone1.setName("Prohibit cooling zone 1");
+
+  prohibitHeatingZone2.setIcon("mdi:radiator-off");
+  prohibitHeatingZone2.setName("Prohibit heating zone 2");
+
+  prohibitCoolingZone2.setIcon("mdi:snowflake-off");
+  prohibitCoolingZone2.setName("Prohibit cooling zone 2");
 
   holidayModeActive.setIcon("mdi:beach");
   holidayModeActive.setName("Holiday mode active");

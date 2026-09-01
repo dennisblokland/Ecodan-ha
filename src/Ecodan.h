@@ -41,6 +41,7 @@ class ECODAN : public ECODANDECODER
     void SetZoneFlowSetpoint(uint8_t Target, uint8_t Zones);
     void SetZoneCurveSetpoint(uint8_t Target, uint8_t Zones);
     void ForceDHW(uint8_t OnOff);
+    void SetControllerFlag(uint8_t Flag, uint8_t OnOff);
     void SetHotWaterSetpoint(uint8_t Target);
     
     void SetHeatingControlMode(String *Mode, uint8_t Zones);
