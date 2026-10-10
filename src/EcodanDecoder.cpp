@@ -255,7 +255,7 @@ void ECODANDECODER::Process0x02(uint8_t * Buffer, EcodanStatus *Status)
 void ECODANDECODER::Process0x03(uint8_t * Buffer, EcodanStatus *Status)
 {
   Status->RefrigerantFaultCode = Buffer[1];
-  Status->FaultCodeNumber = (uint16_t)Buffer[2] * 100 + Buffer[3];
+  Status->FaultCodeNumber = ((uint16_t)Buffer[2] << 8) | Buffer[3]; // Hex check code, 0x8000 = no fault
   Status->FaultCodeLetter1 = (char)Buffer[4];
   Status->FaultCodeLetter2 = (char)Buffer[5];
   Status->MultiZoneRunning = Buffer[8];

@@ -30,6 +30,7 @@
 #include "TimerCallBack.h"
 #include "Debug.h"
 #include "OTA.h"
+#include "FaultCodes.h"
 
 #define HEATPUMP_STREAM Serial2
 #define SERIAL_BAUD 2400
@@ -103,7 +104,6 @@ HASensorNumber deliveredHeatingEnergy("deliveredHeatingEnergy", HASensorNumber::
 HASensorNumber deliveredCoolingEnergy("deliveredCoolingEnergy", HASensorNumber::PrecisionP1);
 HASensorNumber deliveredHotWaterEnergy("deliveredHotWaterEnergy", HASensorNumber::PrecisionP1);
 HASensorNumber hotWaterTemperature2("hotWaterTemperature2", HASensorNumber::PrecisionP1);
-HASensorNumber faultCodeNumber("faultCodeNumber", HASensorNumber::PrecisionP0);
 HASensorNumber refrigerantFaultCode("refrigerantFaultCode", HASensorNumber::PrecisionP0);
 HASensorNumber multiZoneRunning("multiZoneRunning", HASensorNumber::PrecisionP0);
 HASensorNumber faultStatus("faultStatus", HASensorNumber::PrecisionP0);
@@ -155,6 +155,8 @@ HASensor deliveredEnergyDateTime("deliveredEnergyDateTime");
 HASensor heatSource("heatSource");
 HASensor heatSourcePhase("heatSourcePhase");
 HASensor errorCode("errorCode");
+HASensor faultCodeNumber("faultCodeNumber");
+HASensor faultDescription("faultDescription");
 HASensor compressorState("compressorState");
 HASensor heatingControlModeZone2("heatingControlModeZone2");
 HASelect heatingControlMode("heatingControlMode");
@@ -284,14 +286,6 @@ const char *heatSourcePhaseLabel(uint8_t value)
   }
 }
 
-char safeLetter(char value)
-{
-  if (value >= 32 && value <= 126)
-  {
-    return value;
-  }
-  return '-';
-}
 }
 
 void loop()
@@ -580,6 +574,7 @@ void TestReport(void)
   static uint8_t lastMultiZoneRunning = 0xFF;
   static uint8_t lastFaultStatus = 0xFF;
   static char lastErrorCode[24] = "";
+  static char lastFaultDescription[72] = "";
   static char lastSystemTimestamp[20] = "";
   static char lastConsumedTimestamp[20] = "";
   static char lastDeliveredTimestamp[20] = "";
@@ -678,27 +673,39 @@ void TestReport(void)
   }
   if (HeatPump.Status.FaultCodeNumber != lastFaultCodeNumber)
   {
-    faultCodeNumber.setValue(HeatPump.Status.FaultCodeNumber);
+    char faultNumberText[8];
+    snprintf(faultNumberText, sizeof(faultNumberText), "%04X", HeatPump.Status.FaultCodeNumber);
+    faultCodeNumber.setValue(faultNumberText);
     lastFaultCodeNumber = HeatPump.Status.FaultCodeNumber;
   }
   updateUInt8IfChanged(refrigerantFaultCode, HeatPump.Status.RefrigerantFaultCode, lastRefrigerantFaultCode);
   updateUInt8IfChanged(multiZoneRunning, HeatPump.Status.MultiZoneRunning, lastMultiZoneRunning);
   updateUInt8IfChanged(faultStatus, HeatPump.Status.FaultStatus, lastFaultStatus);
+  const char *faultText;
   if (HeatPump.Status.FaultStatus == 0 && HeatPump.Status.RefrigerantFaultCode == 0)
   {
     strncpy(errorText, "OK", sizeof(errorText));
     errorText[sizeof(errorText) - 1] = '\0';
+    faultText = "No fault";
+  }
+  else if (isFaultLetter(HeatPump.Status.FaultCodeLetter1) && isFaultLetter(HeatPump.Status.FaultCodeLetter2))
+  {
+    // Remote controller style code, e.g. "L9"
+    snprintf(errorText,
+             sizeof(errorText),
+             "%c%c",
+             HeatPump.Status.FaultCodeLetter1,
+             HeatPump.Status.FaultCodeLetter2);
+    faultText = faultCodeDescription(errorText);
   }
   else
   {
-    snprintf(errorText,
-             sizeof(errorText),
-             "%u%c%c",
-             HeatPump.Status.FaultCodeNumber,
-             safeLetter(HeatPump.Status.FaultCodeLetter1),
-             safeLetter(HeatPump.Status.FaultCodeLetter2));
+    // Fall back to the 4 digit check code, e.g. "6201"
+    snprintf(errorText, sizeof(errorText), "%04X", HeatPump.Status.FaultCodeNumber);
+    faultText = faultCodeDescription(errorText);
   }
   updateTextIfChanged(errorCode, errorText, lastErrorCode, sizeof(lastErrorCode));
+  updateTextIfChanged(faultDescription, faultText, lastFaultDescription, sizeof(lastFaultDescription));
   if (formatTimestamp(HeatPump.Status.DateTimeStamp, timestamp, sizeof(timestamp)))
   {
     updateTextIfChanged(systemDateTime, timestamp, lastSystemTimestamp, sizeof(lastSystemTimestamp));
@@ -1042,6 +1049,9 @@ void setupSensors()
 
   faultCodeNumber.setIcon("mdi:alert");
   faultCodeNumber.setName("Fault code number");
+
+  faultDescription.setIcon("mdi:alert-circle-outline");
+  faultDescription.setName("Fault description");
 
   refrigerantFaultCode.setIcon("mdi:alert");
   refrigerantFaultCode.setName("Refrigerant fault code");
